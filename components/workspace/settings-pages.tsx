@@ -802,7 +802,7 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
     { id: 'EV-3', timestamp: 'Sep 7, 2026 · 4:41 PM', user: 'Marcus Lee', action: 'Created work order', entityType: 'Maintenance', entity: 'Hilti TE 30-A36' },
     { id: 'EV-4', timestamp: 'Sep 6, 2026 · 2:15 PM', user: 'Nora Patel', action: 'Approved purchase', entityType: 'Spending limit', entity: 'Sony FX3 Camera' },
     { id: 'EV-5', timestamp: 'Sep 5, 2026 · 11:03 AM', user: 'Jamie Smith', action: 'Updated permissions', entityType: 'Role', entity: 'Manager role' },
-    { id: 'EV-6', timestamp: 'Sep 5, 2026 · 9:47 AM', user: 'Compass', action: 'Created asset', entityType: 'Asset', entity: 'Dell U2723QE (NST-1052)' },
+    { id: 'EV-6', timestamp: 'Sep 5, 2026 · 9:47 AM', user: 'GriffinEye', action: 'Created asset', entityType: 'Asset', entity: 'Dell U2723QE (NST-1052)' },
   ]
   const filtered = events.filter((e) => (!userFilter || e.user === userFilter) && (!actionFilter || e.action === actionFilter))
   return (

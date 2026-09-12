@@ -123,18 +123,18 @@ function ScanAssetModal({ onFound }: { onFound: (asset: AssetRecord) => void }) 
   )
 }
 
-function CompassBar({ onSubmit }: { onSubmit: (query: string) => void }) {
+function GriffinEyeBar({ onSubmit }: { onSubmit: (query: string) => void }) {
   const [value, setValue] = useState('')
   return (
     <form
-      className="compass-bar"
+      className="griffin-eye-bar"
       onSubmit={(e) => {
         e.preventDefault()
         if (value.trim()) onSubmit(value.trim())
       }}
     >
       <Compass size={16} strokeWidth={2} />
-      <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ask Compass… e.g. laptops checked out to Marketing over 2 years old" />
+      <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ask GriffinEye… e.g. laptops checked out to Marketing over 2 years old" />
       <button type="submit" className="button dark small">Ask</button>
     </form>
   )
@@ -168,15 +168,15 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [detail, setDetail] = useState<AssetRecord | null>(null)
   const [showScan, setShowScan] = useState(false)
-  const [compassResults, setCompassResults] = useState<AssetRecord[] | null>(null)
-  const [compassLabel, setCompassLabel] = useState('')
+  const [griffinEyeResults, setGriffinEyeResults] = useState<AssetRecord[] | null>(null)
+  const [griffinEyeLabel, setGriffinEyeLabel] = useState('')
 
   useEffect(() => {
     if (scanTrigger) setShowScan(true)
   }, [scanTrigger])
 
   const filtered = useMemo(() => {
-    if (compassResults) return compassResults
+    if (griffinEyeResults) return griffinEyeResults
     return assets.filter((asset) => {
       const matchesQuery = `${asset.name} ${asset.id} ${asset.assignedTo}`.toLowerCase().includes(query.toLowerCase())
       const matchesCategory = !category || asset.category === category
@@ -185,7 +185,7 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
       const matchesLifecycle = !lifecycleFilter || asset.lifecycleStage === lifecycleFilter
       return matchesQuery && matchesCategory && matchesLocation && matchesStatus && matchesLifecycle
     })
-  }, [query, category, locationFilter, statusFilter, lifecycleFilter, compassResults])
+  }, [query, category, locationFilter, statusFilter, lifecycleFilter, griffinEyeResults])
 
   const nearingEndOfLife = assets.filter((a) => a.warrantyExpiration < 'Jan 1, 2025' || a.status === 'In maintenance')
 
@@ -200,11 +200,11 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
     setStatusFilter((current) => (current === id ? '' : ['total', 'total'].includes(id) ? '' : id === 'total' ? '' : id))
   }
 
-  function runCompassQuery(question: string) {
+  function runGriffinEyeQuery(question: string) {
     const results = assets.filter((a) => a.category === 'Computers' && a.purchaseDate < 'Jan 1, 2024')
-    setCompassResults(results)
-    setCompassLabel(question)
-    onAnnounce(`Compass found ${results.length} assets matching “${question}.”`)
+    setGriffinEyeResults(results)
+    setGriffinEyeLabel(question)
+    onAnnounce(`GriffinEye found ${results.length} assets matching “${question}.”`)
   }
 
   return (
@@ -220,7 +220,7 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
         extraActions={<button className="button secondary" onClick={() => setShowScan(true)}><QrCode size={16} /> Scan asset</button>}
       />
       <span className="scan-info-line"><Smartphone size={14} /> Assets can be scanned from any phone camera — no dedicated mobile app required.</span>
-      <CompassBar onSubmit={runCompassQuery} />
+      <GriffinEyeBar onSubmit={runGriffinEyeQuery} />
       <MetricStrip metrics={metrics} activeId={statusFilter || 'total'} onSelect={toggleMetric} />
       <Panel title="Assets nearing end of life" description={`${nearingEndOfLife.length} assets are out of warranty or currently in maintenance`}>
         <div className="mini-insight-list">
@@ -238,10 +238,10 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
         description="Search, filter, and take action on every asset."
         action={<div className="list-tools"><span className="filter-button" style={{ pointerEvents: 'none' }}>{filtered.length} results</span></div>}
       >
-        {compassResults && (
-          <div className="compass-result-banner">
-            <span><Compass size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Showing Compass results for “{compassLabel}”</span>
-            <button className="compass-clear" onClick={() => { setCompassResults(null); setCompassLabel('') }}>Clear Compass filter</button>
+        {griffinEyeResults && (
+          <div className="griffin-eye-result-banner">
+            <span><Compass size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Showing GriffinEye results for “{griffinEyeLabel}”</span>
+            <button className="griffin-eye-clear" onClick={() => { setGriffinEyeResults(null); setGriffinEyeLabel('') }}>Clear GriffinEye filter</button>
           </div>
         )}
         <Toolbar
@@ -272,7 +272,7 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
           onToggleSelect={(id) => setSelected((s) => { const next = new Set(s); next.has(id) ? next.delete(id) : next.add(id); return next })}
           onToggleSelectAll={(checked) => setSelected(checked ? new Set(filtered.map((a) => a.id)) : new Set())}
           onRowClick={setDetail}
-          emptyState={<EmptyState title="No assets match your filters" description="Try adjusting your search or clearing filters." ctaLabel="Clear filters" onCta={() => { setQuery(''); setCategory(''); setLocationFilter(''); setStatusFilter(''); setLifecycleFilter(''); setCompassResults(null) }} />}
+          emptyState={<EmptyState title="No assets match your filters" description="Try adjusting your search or clearing filters." ctaLabel="Clear filters" onCta={() => { setQuery(''); setCategory(''); setLocationFilter(''); setStatusFilter(''); setLifecycleFilter(''); setGriffinEyeResults(null) }} />}
           columns={[
             { key: 'id', header: 'Asset ID', mono: true, render: (a) => a.id, sortValue: (a) => a.id },
             { key: 'name', header: 'Name', render: (a) => <strong>{a.name}</strong>, sortValue: (a) => a.name },
@@ -329,7 +329,7 @@ export function AssetsPage({ onAnnounce, scanTrigger }: { onAnnounce: Announce; 
             <HistoryList items={[
               { who: 'Jamie Smith', what: 'Status updated', when: 'Sep 5, 2026' },
               { who: detail.assignedTo, what: 'Checked out', when: detail.purchaseDate },
-              { who: 'Compass', what: 'Record created', when: detail.purchaseDate },
+              { who: 'GriffinEye', what: 'Record created', when: detail.purchaseDate },
             ]} />
           </DrawerSection>
           <DrawerSection title="Attachments">
