@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowDownToLine,
   Bell,
   Building2,
   CheckCircle2,
   ClipboardList,
+  Columns3,
   CreditCard,
+  FolderKanban,
   Database,
   Fingerprint,
   Globe,
@@ -44,8 +46,33 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react'
+import { FieldsSettings } from '@/components/workspace/fields-settings'
+import { GroupsSettings } from '@/components/workspace/groups-settings'
+import { GriffinBillingCredits } from '@/components/workspace/griffin-billing-credits'
+import { SettingsProvider } from '@/components/workspace/settings-context'
+import {
+  WiredApprovalGroupsSettings,
+  WiredBillingSettings,
+  WiredBrandingSettings,
+  WiredDepartmentsSettings,
+  WiredDeveloperSettings,
+  WiredIntegrationsSettings,
+  WiredNotificationsSettings,
+  WiredPreferencesSettings,
+  WiredProfileSettings,
+  WiredRolesSettings,
+  WiredSecuritySettings,
+  WiredSpendingLimitsSettings,
+  WiredTeamSettings,
+  WiredWorkflowsSettings,
+} from '@/components/workspace/wired-settings'
 import { DataTable, DetailDrawer, DrawerSection, EmptyState, StatusBadge, ToggleRow } from './primitives'
 import { locations } from '@/lib/workspace-data'
+import {
+  AUDIT_CATEGORIES,
+  AUDIT_CATEGORY_LABELS,
+  type DbAuditLogRow,
+} from '@/lib/griffineye-audit'
 
 type Announce = (message: string) => void
 
@@ -61,6 +88,8 @@ const sectionCopy: Record<string, [string, string, React.ComponentType<{ size?: 
   'Spending limits': ['Spending limits', 'Set guardrails for purchases and asset operations', Wallet],
   'Roles & permissions': ['Roles & permissions', 'Control exactly what each role can see and do', KeyRound],
   'Approval groups': ['Approval groups', 'Route asset purchases and transfers for approval', CheckCircle2],
+  Groups: ['Groups', 'Create and manage workspace record types', FolderKanban],
+  Fields: ['Fields', 'Configure fields for each group', Columns3],
   Team: ['Team', 'Manage workspace members and access', Users],
   Departments: ['Departments', 'Organize people and assets by department', Building2],
   Workflows: ['Workflows', 'Configure approval and reminder automations', Workflow],
@@ -122,7 +151,15 @@ function ProfileSettings({ onAnnounce }: { onAnnounce: Announce }) {
 }
 
 // ---------- Billing ----------
-function BillingSettings({ onAnnounce }: { onAnnounce: Announce }) {
+function BillingSettings({
+  onAnnounce,
+  creditPurchaseNotice,
+  checkoutSessionId,
+}: {
+  onAnnounce: Announce
+  creditPurchaseNotice?: 'cancelled' | null
+  checkoutSessionId?: string | null
+}) {
   const invoices = [
     { id: 'INV-2026-08', date: 'Aug 1, 2026', amount: '$499.00', status: 'Paid' },
     { id: 'INV-2026-07', date: 'Jul 1, 2026', amount: '$499.00', status: 'Paid' },
@@ -148,6 +185,7 @@ function BillingSettings({ onAnnounce }: { onAnnounce: Announce }) {
           <div className="field-item"><span>Payment method</span><strong>Visa ending 4471</strong></div>
         </div>
       </SettingsCard>
+      <GriffinBillingCredits purchaseNotice={creditPurchaseNotice} checkoutSessionId={checkoutSessionId} />
       <SettingsCard title="Invoice history" description="Download past invoices for your records.">
         <DataTable
           rows={invoices.map((inv) => ({ ...inv }))}
@@ -793,28 +831,111 @@ function WorkflowsSettings({ onAnnounce }: { onAnnounce: Announce }) {
 }
 
 // ---------- Audit log ----------
+const AUDIT_TABS = [
+  { id: 'all', label: 'All activity' },
+  ...AUDIT_CATEGORIES.map((category) => ({ id: category, label: AUDIT_CATEGORY_LABELS[category] })),
+] as const
+
+type AuditTabId = (typeof AUDIT_TABS)[number]['id']
+
+function formatEventTimestamp(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return `${date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })} · ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+}
+
 function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
+  const [tab, setTab] = useState<AuditTabId>('all')
   const [userFilter, setUserFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
-  const events = [
-    { id: 'EV-1', timestamp: 'Sep 8, 2026 · 9:14 AM', user: 'Maya Patel', action: 'Checked out', entityType: 'Asset', entity: 'MacBook Pro 14” (NST-1048)' },
-    { id: 'EV-2', timestamp: 'Sep 8, 2026 · 8:02 AM', user: 'Jamie Smith', action: 'Generated report', entityType: 'Report', entity: 'Asset register' },
-    { id: 'EV-3', timestamp: 'Sep 7, 2026 · 4:41 PM', user: 'Marcus Lee', action: 'Created work order', entityType: 'Maintenance', entity: 'Hilti TE 30-A36' },
-    { id: 'EV-4', timestamp: 'Sep 6, 2026 · 2:15 PM', user: 'Nora Patel', action: 'Approved purchase', entityType: 'Spending limit', entity: 'Sony FX3 Camera' },
-    { id: 'EV-5', timestamp: 'Sep 5, 2026 · 11:03 AM', user: 'Jamie Smith', action: 'Updated permissions', entityType: 'Role', entity: 'Manager role' },
-    { id: 'EV-6', timestamp: 'Sep 5, 2026 · 9:47 AM', user: 'GriffinEye', action: 'Created asset', entityType: 'Asset', entity: 'Dell U2723QE (NST-1052)' },
-  ]
-  const filtered = events.filter((e) => (!userFilter || e.user === userFilter) && (!actionFilter || e.action === actionFilter))
+  const [events, setEvents] = useState<DbAuditLogRow[]>([])
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadEvents() {
+      setLoading(true)
+      setError(null)
+      try {
+        const query = tab === 'all' ? '' : `?category=${tab}`
+        const response = await fetch(`/api/audit-log${query}`)
+        const data = (await response.json()) as {
+          events?: DbAuditLogRow[]
+          counts?: Record<string, number>
+          error?: string
+        }
+        if (cancelled) return
+        if (!response.ok) throw new Error(data.error ?? 'Could not load the activity timeline.')
+        setEvents(data.events ?? [])
+        setCounts(data.counts ?? {})
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the activity timeline.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void loadEvents()
+    return () => {
+      cancelled = true
+    }
+  }, [tab])
+
+  // Switching tabs reloads from the server, so stale dropdown selections would
+  // silently hide every row.
+  useEffect(() => {
+    setUserFilter('')
+    setActionFilter('')
+  }, [tab])
+
+  const filtered = events.filter(
+    (event) =>
+      (!userFilter || event.actor_label === userFilter) && (!actionFilter || event.action === actionFilter),
+  )
+
+  const rows = filtered.map((event) => ({
+    id: event.id,
+    timestamp: formatEventTimestamp(event.created_at),
+    user: event.actor_label || 'System',
+    action: event.action,
+    entityType: event.entity_type || '—',
+    entity: event.entity_label || '—',
+    source: event.source,
+  }))
+
   return (
     <SettingsCard
       title="Activity timeline"
       description="Every important action across your workspace, retained for 12 months."
       action={<button className="button secondary small" onClick={() => onAnnounce('Audit log exported.')}><ArrowDownToLine size={14} /> Export log</button>}
     >
+      <div className="intake-mode-tabs audit-tabs" role="tablist" aria-label="Log category">
+        {AUDIT_TABS.map((auditTab) => (
+          <button
+            key={auditTab.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === auditTab.id}
+            className={`intake-mode-tab ${tab === auditTab.id ? 'active' : ''}`}
+            onClick={() => setTab(auditTab.id)}
+          >
+            {auditTab.label}
+            {auditTab.id !== 'all' && counts[auditTab.id] ? <span className="audit-tab-count">{counts[auditTab.id]}</span> : null}
+          </button>
+        ))}
+      </div>
+
       <div className="table-toolbar list-toolbar" style={{ paddingLeft: 0, paddingRight: 0 }}>
         <select className="filter-select" value={userFilter} onChange={(e) => setUserFilter(e.target.value)} aria-label="Filter by user">
           <option value="">User</option>
-          {Array.from(new Set(events.map((e) => e.user))).map((u) => <option key={u} value={u}>{u}</option>)}
+          {Array.from(new Set(events.map((e) => e.actor_label).filter(Boolean))).map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
         <select className="filter-select" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} aria-label="Filter by action">
           <option value="">Action</option>
@@ -822,39 +943,72 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
         </select>
         <button className="filter-button" onClick={() => { setUserFilter(''); setActionFilter('') }}><RotateCcw size={13} /> Reset</button>
       </div>
-      <DataTable
-        rows={filtered}
-        columns={[
-          { key: 'timestamp', header: 'Timestamp', mono: true, render: (r) => r.timestamp },
-          { key: 'user', header: 'User', render: (r) => <strong>{r.user}</strong> },
-          { key: 'action', header: 'Action', render: (r) => r.action },
-          { key: 'entityType', header: 'Entity type', render: (r) => r.entityType },
-          { key: 'entity', header: 'Entity name', render: (r) => r.entity },
-        ]}
-      />
+
+      {error ? <p className="table-muted">{error}</p> : null}
+      {loading ? (
+        <p className="table-muted">Loading activity…</p>
+      ) : rows.length === 0 && !error ? (
+        <p className="table-muted">No activity recorded yet for this log.</p>
+      ) : (
+        <DataTable
+          rows={rows}
+          columns={[
+            { key: 'timestamp', header: 'Timestamp', mono: true, render: (r) => r.timestamp },
+            { key: 'user', header: 'User', render: (r) => <strong>{r.user}</strong> },
+            { key: 'action', header: 'Action', render: (r) => r.action },
+            { key: 'entityType', header: 'Entity type', render: (r) => r.entityType },
+            { key: 'entity', header: 'Entity name', render: (r) => r.entity },
+            { key: 'source', header: 'Via', render: (r) => <span className="audit-source-pill">{r.source}</span> },
+          ]}
+        />
+      )}
     </SettingsCard>
   )
 }
 
-export function SettingsSection({ section, onAnnounce, onNavigateSection, onStartOnboarding }: { section: string; onAnnounce: Announce; onNavigateSection?: (section: string) => void; onStartOnboarding?: () => void }) {
+export function SettingsSection({
+  section,
+  onAnnounce,
+  onNavigateSection,
+  onStartOnboarding,
+  creditPurchaseNotice,
+  checkoutSessionId,
+}: {
+  section: string
+  onAnnounce: Announce
+  onNavigateSection?: (section: string) => void
+  onStartOnboarding?: () => void
+  creditPurchaseNotice?: 'cancelled' | null
+  checkoutSessionId?: string | null
+}) {
   return (
-    <div className="settings-page">
-      <SettingsHero section={section} />
-      {section === 'Profile' && <ProfileSettings onAnnounce={onAnnounce} />}
-      {section === 'Billing' && <BillingSettings onAnnounce={onAnnounce} />}
-      {section === 'Notifications' && <NotificationsSettings onAnnounce={onAnnounce} />}
-      {section === 'Preferences' && <PreferencesSettings onAnnounce={onAnnounce} onStartOnboarding={onStartOnboarding} />}
-      {section === 'Security' && <SecuritySettings onAnnounce={onAnnounce} />}
-      {section === 'Integrations' && <IntegrationsSettings onAnnounce={onAnnounce} onNavigateSection={onNavigateSection} />}
-      {section === 'Developer' && <DeveloperSettings onAnnounce={onAnnounce} />}
-      {section === 'Branding' && <BrandingSettings onAnnounce={onAnnounce} />}
-      {section === 'Spending limits' && <SpendingLimitsSettings onAnnounce={onAnnounce} />}
-      {section === 'Roles & permissions' && <RolesSettings onAnnounce={onAnnounce} />}
-      {section === 'Approval groups' && <ApprovalGroupsSettings onAnnounce={onAnnounce} />}
-      {section === 'Team' && <TeamSettings onAnnounce={onAnnounce} />}
-      {section === 'Departments' && <DepartmentsSettings onAnnounce={onAnnounce} />}
-      {section === 'Workflows' && <WorkflowsSettings onAnnounce={onAnnounce} />}
-      {section === 'Audit log' && <AuditLogSettings onAnnounce={onAnnounce} />}
-    </div>
+    <SettingsProvider>
+      <div className="settings-page">
+        <SettingsHero section={section} />
+        {section === 'Profile' && <WiredProfileSettings onAnnounce={onAnnounce} />}
+        {section === 'Billing' && (
+          <WiredBillingSettings
+            onAnnounce={onAnnounce}
+            creditPurchaseNotice={creditPurchaseNotice}
+            checkoutSessionId={checkoutSessionId}
+          />
+        )}
+        {section === 'Notifications' && <WiredNotificationsSettings onAnnounce={onAnnounce} />}
+        {section === 'Preferences' && <WiredPreferencesSettings onAnnounce={onAnnounce} onStartOnboarding={onStartOnboarding} />}
+        {section === 'Security' && <WiredSecuritySettings onAnnounce={onAnnounce} />}
+        {section === 'Integrations' && <WiredIntegrationsSettings onAnnounce={onAnnounce} onNavigateSection={onNavigateSection} />}
+        {section === 'Developer' && <WiredDeveloperSettings onAnnounce={onAnnounce} />}
+        {section === 'Branding' && <WiredBrandingSettings onAnnounce={onAnnounce} />}
+        {section === 'Spending limits' && <WiredSpendingLimitsSettings onAnnounce={onAnnounce} />}
+        {section === 'Roles & permissions' && <WiredRolesSettings onAnnounce={onAnnounce} />}
+        {section === 'Approval groups' && <WiredApprovalGroupsSettings onAnnounce={onAnnounce} />}
+        {section === 'Groups' && <GroupsSettings onAnnounce={onAnnounce} />}
+        {section === 'Fields' && <FieldsSettings onAnnounce={onAnnounce} />}
+        {section === 'Team' && <WiredTeamSettings onAnnounce={onAnnounce} />}
+        {section === 'Departments' && <WiredDepartmentsSettings onAnnounce={onAnnounce} />}
+        {section === 'Workflows' && <WiredWorkflowsSettings onAnnounce={onAnnounce} />}
+        {section === 'Audit log' && <AuditLogSettings onAnnounce={onAnnounce} />}
+      </div>
+    </SettingsProvider>
   )
 }

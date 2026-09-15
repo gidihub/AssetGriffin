@@ -47,7 +47,7 @@ export default function AboutPage() {
                   <Icon size={22} />
                 </span>
                 <div>
-                  <h3 className="text-base font-bold text-foreground">{title}</h3>
+                  <h3 className="text-base text-foreground">{title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
                 </div>
               </div>
@@ -58,7 +58,7 @@ export default function AboutPage() {
 
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             Asset-based pricing, from day one
           </h2>
           <p className="mt-4 text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">

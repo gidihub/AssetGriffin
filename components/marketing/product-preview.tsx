@@ -1,15 +1,16 @@
 'use client'
 
 import {
-  AssetsPage,
-  AuditsPage,
-  InspectionsPage,
-  LocationsPage,
-  MaintenancePage,
-  PeoplePage,
-  ReportsPage,
-} from '@/components/workspace/workspace-pages'
-import { SettingsSection } from '@/components/workspace/settings-pages'
+  MarketingAssetsPreview,
+  MarketingAuditsPreview,
+  MarketingAuditLogPreview,
+  MarketingInspectionsPreview,
+  MarketingLocationsPreview,
+  MarketingMaintenancePreview,
+  MarketingPeoplePreview,
+  MarketingReportsPreview,
+  MarketingRolesPreview,
+} from '@/components/marketing/marketing-preview-screens'
 
 export type ProductPreviewScreen =
   | 'assets'
@@ -22,28 +23,26 @@ export type ProductPreviewScreen =
   | 'audit-log'
   | 'roles'
 
-function noop() {}
-
 function ScreenBody({ screen }: { screen: ProductPreviewScreen }) {
   switch (screen) {
     case 'assets':
-      return <AssetsPage onAnnounce={noop} />
+      return <MarketingAssetsPreview />
     case 'people':
-      return <PeoplePage onAnnounce={noop} />
+      return <MarketingPeoplePreview />
     case 'locations':
-      return <LocationsPage onAnnounce={noop} />
+      return <MarketingLocationsPreview />
     case 'maintenance':
-      return <MaintenancePage onAnnounce={noop} />
+      return <MarketingMaintenancePreview />
     case 'audits':
-      return <AuditsPage onAnnounce={noop} />
+      return <MarketingAuditsPreview />
     case 'inspections':
-      return <InspectionsPage onAnnounce={noop} />
+      return <MarketingInspectionsPreview />
     case 'reports':
-      return <ReportsPage onAnnounce={noop} />
+      return <MarketingReportsPreview />
     case 'audit-log':
-      return <SettingsSection section="Audit log" onAnnounce={noop} />
+      return <MarketingAuditLogPreview />
     case 'roles':
-      return <SettingsSection section="Roles & permissions" onAnnounce={noop} />
+      return <MarketingRolesPreview />
   }
 }
 
@@ -64,7 +63,7 @@ export function ProductPreview({ screen, caption }: ProductPreviewProps) {
         <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
         <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
         <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
-        <span className="ml-2 text-xs font-semibold text-muted-foreground">assetgriffin.com/app</span>
+        <span className="ml-2 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">assetgriffin.com/app</span>
       </div>
       <div className="preview-frame max-h-[600px] overflow-y-auto bg-[#FAFAF8] p-5">
         <ScreenBody screen={screen} />

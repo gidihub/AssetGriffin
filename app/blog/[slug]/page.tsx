@@ -38,12 +38,12 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-20">
-          <Link href="/blog" className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
+          <Link href="/blog" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
             <ArrowLeft size={15} />
             Back to blog
           </Link>
-          <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.1em] text-primary">{post.category}</p>
-          <h1 className="mt-2 text-balance text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.08em] text-primary">{post.category}</p>
+          <h1 className="mt-2 text-balance text-3xl tracking-tight text-foreground md:text-4xl">
             {post.title}
           </h1>
           <p className="mt-4 text-sm text-muted-foreground">
@@ -57,7 +57,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <div className="flex flex-col gap-12">
             {post.sections.map((section) => (
               <div key={section.heading}>
-                <h2 className="text-xl font-bold tracking-tight text-foreground md:text-2xl">{section.heading}</h2>
+                <h2 className="text-xl tracking-tight text-foreground md:text-2xl">{section.heading}</h2>
                 <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">{section.body}</p>
               </div>
             ))}
@@ -65,7 +65,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
           {related.length > 0 && (
             <div className="mt-16 border-t border-border pt-10">
-              <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Related reading</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Related reading</p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 {related.map((r) => (
                   <Link
@@ -73,7 +73,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                     href={`/blog/${r.slug}`}
                     className="group flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
                   >
-                    <span className="text-sm font-semibold text-foreground text-pretty">{r.title}</span>
+                    <span className="text-sm text-foreground text-pretty">{r.title}</span>
                     <ArrowRight size={16} className="shrink-0 text-primary transition-transform group-hover:translate-x-0.5" />
                   </Link>
                 ))}

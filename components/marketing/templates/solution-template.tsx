@@ -54,13 +54,13 @@ export function SolutionTemplate({
 
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-4xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             Who this is for
           </h2>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {audiences.map((audience) => (
               <div key={audience.title} className="rounded-xl border border-border bg-card p-5">
-                <h3 className="text-sm font-bold text-foreground">{audience.title}</h3>
+                <h3 className="text-sm text-foreground">{audience.title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{audience.body}</p>
               </div>
             ))}

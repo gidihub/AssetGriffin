@@ -16,7 +16,7 @@ export function LegalContent({ lastUpdated, sections }: LegalContentProps) {
         <p className="text-sm text-muted-foreground">Last updated: {lastUpdated}</p>
 
         <nav aria-label="Section navigation" className="mt-8 rounded-2xl border border-border bg-card p-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">On this page</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">On this page</p>
           <ol className="mt-3 flex flex-col gap-2">
             {sections.map((section, index) => (
               <li key={section.heading}>
@@ -34,7 +34,7 @@ export function LegalContent({ lastUpdated, sections }: LegalContentProps) {
         <div className="mt-10 flex flex-col gap-10">
           {sections.map((section) => (
             <div key={section.heading} id={slugify(section.heading)} className="scroll-mt-24">
-              <h2 className="text-xl font-bold tracking-tight text-foreground">{section.heading}</h2>
+              <h2 className="text-xl tracking-tight text-foreground">{section.heading}</h2>
               <div className="mt-3 flex flex-col gap-3">
                 {section.body.map((paragraph, index) => (
                   <p key={index} className="text-pretty text-sm leading-relaxed text-muted-foreground">

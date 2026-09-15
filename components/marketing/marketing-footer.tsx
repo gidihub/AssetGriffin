@@ -71,7 +71,7 @@ export function MarketingFooter() {
                 height={32}
                 className="h-8 w-8 rounded-lg"
               />
-              <span className="text-[15px] font-bold tracking-tight text-background">AssetGriffin</span>
+              <span className="text-[15px] tracking-tight text-background">AssetGriffin</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-background/60">
               Asset tracking software that scales with you. Free to start, no per-seat pricing, ever.
@@ -80,7 +80,7 @@ export function MarketingFooter() {
 
           {columns.map((column) => (
             <div key={column.title}>
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-background/50">{column.title}</h3>
+              <h3 className="font-mono text-[11px] uppercase tracking-[0.08em] text-background/50">{column.title}</h3>
               <ul className="mt-4 flex flex-col gap-2.5">
                 {column.links.map((link) => (
                   <li key={link.href}>

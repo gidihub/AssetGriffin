@@ -25,10 +25,10 @@ export function AssetTagGenerator() {
   return (
     <div className="grid gap-8 md:grid-cols-2">
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-base font-bold text-foreground">Asset details</h2>
+        <h2 className="text-base text-foreground">Asset details</h2>
         <div className="mt-5 flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Asset name</span>
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Asset name</span>
             <input
               type="text"
               value={assetName}
@@ -37,7 +37,7 @@ export function AssetTagGenerator() {
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Category</span>
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Category</span>
             <input
               type="text"
               value={category}
@@ -46,7 +46,7 @@ export function AssetTagGenerator() {
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Tag code</span>
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Tag code</span>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -69,15 +69,15 @@ export function AssetTagGenerator() {
 
       <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-border bg-secondary p-6">
         <div id="asset-tag-preview" className="w-full max-w-[280px] rounded-xl border-2 border-foreground bg-card p-5 text-center shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">AssetGriffin</p>
-          <p className="mt-3 text-sm font-bold leading-tight text-foreground">{assetName || 'Untitled asset'}</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-primary">AssetGriffin</p>
+          <p className="mt-3 text-sm leading-tight text-foreground">{assetName || 'Untitled asset'}</p>
           <p className="mt-1 text-xs text-muted-foreground">{category || 'Uncategorized'}</p>
-          <p className="mt-4 font-mono text-lg font-bold tracking-wider text-foreground">{tagCode}</p>
+          <p className="mt-4 font-mono text-lg tracking-wider text-foreground">{tagCode}</p>
         </div>
         <Button
           type="button"
           variant="outline"
-          className="h-10 rounded-lg border-border text-sm font-semibold"
+          className="h-10 rounded-lg border-border text-sm font-medium"
           onClick={() => window.print()}
         >
           <Printer size={16} /> Print tag

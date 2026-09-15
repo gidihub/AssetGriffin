@@ -29,10 +29,10 @@ export function DepreciationCalculator() {
   return (
     <div className="grid gap-8 md:grid-cols-2">
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-base font-bold text-foreground">Enter asset details</h2>
+        <h2 className="text-base text-foreground">Enter asset details</h2>
         <div className="mt-5 flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Purchase cost ($)</span>
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Purchase cost ($)</span>
             <input
               type="number"
               value={cost}
@@ -42,7 +42,7 @@ export function DepreciationCalculator() {
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Estimated salvage value ($)</span>
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Estimated salvage value ($)</span>
             <input
               type="number"
               value={salvage}
@@ -52,7 +52,7 @@ export function DepreciationCalculator() {
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">Useful life (years)</span>
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Useful life (years)</span>
             <input
               type="number"
               value={life}
@@ -68,12 +68,12 @@ export function DepreciationCalculator() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-base font-bold text-foreground">Depreciation schedule</h2>
+        <h2 className="text-base text-foreground">Depreciation schedule</h2>
         {schedule ? (
           <>
             <p className="mt-3 text-sm text-muted-foreground">
               Annual depreciation:{' '}
-              <span className="font-bold text-foreground">
+              <span className="text-foreground">
                 ${schedule.annual.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </span>
             </p>
@@ -81,9 +81,9 @@ export function DepreciationCalculator() {
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="sticky top-0 bg-secondary">
                   <tr>
-                    <th className="p-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Year</th>
-                    <th className="p-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Depreciation</th>
-                    <th className="p-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Book value</th>
+                    <th className="p-2.5 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Year</th>
+                    <th className="p-2.5 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Depreciation</th>
+                    <th className="p-2.5 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Book value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -93,7 +93,7 @@ export function DepreciationCalculator() {
                       <td className="border-t border-border p-2.5 text-foreground">
                         ${row.depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </td>
-                      <td className="border-t border-border p-2.5 font-semibold text-foreground">
+                      <td className="border-t border-border p-2.5 text-foreground">
                         ${row.bookValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </td>
                     </tr>

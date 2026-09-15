@@ -55,11 +55,11 @@ export default function AssetManagementGuidePage() {
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-20">
           <nav aria-label="Table of contents" className="mb-12 rounded-2xl border border-border bg-card p-6">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">On this page</p>
+            <p className="font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">On this page</p>
             <ul className="mt-3 flex flex-col gap-2">
               {sections.map((section) => (
                 <li key={section.id}>
-                  <a href={`#${section.id}`} className="text-sm font-semibold text-primary hover:underline">
+                  <a href={`#${section.id}`} className="text-sm text-primary hover:underline">
                     {section.title}
                   </a>
                 </li>
@@ -70,7 +70,7 @@ export default function AssetManagementGuidePage() {
           <div className="flex flex-col gap-12">
             {sections.map((section) => (
               <div key={section.id} id={section.id}>
-                <h2 className="text-xl font-bold tracking-tight text-foreground md:text-2xl">{section.title}</h2>
+                <h2 className="text-xl tracking-tight text-foreground md:text-2xl">{section.title}</h2>
                 <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">{section.body}</p>
               </div>
             ))}

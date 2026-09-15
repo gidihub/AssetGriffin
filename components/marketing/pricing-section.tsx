@@ -12,8 +12,8 @@ export async function PricingSection() {
     <section id="pricing" className="border-b border-border bg-secondary">
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
         <div className="max-w-2xl">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Simple, asset-based pricing</p>
-          <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-primary">Simple, asset-based pricing</p>
+          <h2 className="mt-3 text-balance text-3xl tracking-tight text-foreground md:text-4xl">
             Pricing that grows with your assets, not your headcount
           </h2>
           <p className="mt-3 text-sm text-muted-foreground">

@@ -34,7 +34,7 @@ export function FaqAccordion({ items, title = 'Frequently asked questions' }: Fa
       {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       <div className="mx-auto max-w-3xl px-6 py-16 md:py-20">
-        <h2 className="text-balance text-center text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+        <h2 className="text-balance text-center text-2xl tracking-tight text-foreground md:text-3xl">
           {title}
         </h2>
         <div className="mt-10 flex flex-col border-t border-border">
@@ -48,7 +48,7 @@ export function FaqAccordion({ items, title = 'Frequently asked questions' }: Fa
                   aria-expanded={isOpen}
                   onClick={() => setOpenIndex(isOpen ? null : index)}
                 >
-                  <span className="text-sm font-bold text-foreground md:text-base">{item.question}</span>
+                  <span className="text-sm text-foreground md:text-base">{item.question}</span>
                   <ChevronRight
                     size={20}
                     className={`flex-shrink-0 text-primary transition-transform ${isOpen ? 'rotate-90' : ''}`}

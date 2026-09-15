@@ -107,13 +107,13 @@ export function PricingCards({ initialCountryCode }: { initialCountryCode: strin
           >
             <ToggleGroupItem
               value="monthly"
-              className="rounded-full px-4 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="rounded-full px-4 text-sm font-medium text-muted-foreground hover:bg-transparent data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm"
             >
               Monthly
             </ToggleGroupItem>
             <ToggleGroupItem
               value="annual"
-              className="gap-2 rounded-full px-4 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="gap-2 rounded-full px-4 text-sm font-medium text-muted-foreground hover:bg-transparent data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm"
             >
               Annual
               <Badge variant="secondary" className="bg-primary/10 text-primary">
@@ -139,7 +139,7 @@ export function PricingCards({ initialCountryCode }: { initialCountryCode: strin
                   <span className="flex w-full items-center justify-between gap-4">
                     <span className="flex items-center gap-1.5">
                       <span aria-hidden="true">{flagEmoji(currency.flagCountry)}</span>
-                      <span className="font-medium">{currency.code}</span>
+                      <span>{currency.code}</span>
                     </span>
                     <span className="text-muted-foreground">{currency.name}</span>
                   </span>
@@ -207,14 +207,14 @@ function PricingCard({
     >
       <div>
         {tier.highlighted && (
-          <span className="mb-3 inline-block rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold text-primary-foreground">
+          <span className="mb-3 inline-block rounded-full bg-primary px-2.5 py-1 text-[10px] text-primary-foreground">
             Most popular
           </span>
         )}
-        <h3 className="text-base font-bold text-foreground">{tier.name}</h3>
+        <h3 className="text-base text-foreground">{tier.name}</h3>
         <div className="mt-2 flex items-baseline gap-1">
-          <span className="text-3xl font-extrabold tracking-tight text-foreground">{tier.price}</span>
-          {tier.period && <span className="text-sm font-semibold text-muted-foreground">{tier.period}</span>}
+          <span className="text-3xl tracking-tight text-foreground">{tier.price}</span>
+          {tier.period && <span className="text-sm text-muted-foreground">{tier.period}</span>}
         </div>
         <p className="mt-2 text-xs text-muted-foreground">{tier.description}</p>
         {caption && <p className="mt-1 text-[11px] text-muted-foreground/80">{caption}</p>}
@@ -234,7 +234,7 @@ function PricingCard({
         nativeButton={false}
         size="lg"
         variant={tier.highlighted ? "default" : "outline"}
-        className="h-11 w-full rounded-lg border-border text-sm font-semibold"
+        className="h-11 w-full rounded-lg border-border text-sm font-medium"
       >
         {tier.cta}
       </Button>

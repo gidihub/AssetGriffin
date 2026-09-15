@@ -1,17 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import { Check, Compass, Sparkles, Upload, X } from 'lucide-react'
+import { Check, Upload, X } from 'lucide-react'
+import { GriffinEyeIcon } from '@/components/griffineye/griffineye-icon'
+import { GriffinEyeThinking } from '@/components/griffineye/griffineye-thinking'
 import { onboardingTemplates, matchTemplateFromPrompt, type OnboardingTemplate } from '@/lib/onboarding-templates'
-import type { OnboardingTemplateId } from '@/lib/workspace-data'
+import type { OnboardingTemplateId } from '@/lib/onboarding-templates'
 
 export function TemplateGallery({
   onSelectTemplate,
+  onGriffinEyeApply,
   onUploadClick,
   onSkip,
 }: {
   onSelectTemplate: (templateId: OnboardingTemplateId) => void
+  onGriffinEyeApply: (templateId: OnboardingTemplateId, templateTitle: string) => void
   onUploadClick: () => void
   onSkip: () => void
 }) {
@@ -35,10 +39,10 @@ export function TemplateGallery({
 
         <div className="onboarding-action-cards">
           <div className="onboarding-action-card">
-            <div className="onboarding-action-icon coral"><Compass size={20} /></div>
+            <div className="onboarding-action-icon coral"><GriffinEyeIcon size={20} /></div>
             <h2>Build with GriffinEye</h2>
             <p>Describe your ideal setup and let GriffinEye configure your account.</p>
-            <button className="button primary small" onClick={() => setShowGriffinEye(true)}><Sparkles size={14} /> Use GriffinEye</button>
+            <button className="button primary small" onClick={() => setShowGriffinEye(true)}><GriffinEyeIcon size={14} /> Use GriffinEye</button>
           </div>
           <div className="onboarding-action-card">
             <div className="onboarding-action-icon teal"><Upload size={20} /></div>
@@ -63,9 +67,9 @@ export function TemplateGallery({
       {showGriffinEye && (
         <GriffinEyeModal
           onClose={() => setShowGriffinEye(false)}
-          onApply={(templateId) => {
+          onApply={(templateId, templateTitle) => {
             setShowGriffinEye(false)
-            onSelectTemplate(templateId)
+            onGriffinEyeApply(templateId, templateTitle)
           }}
         />
       )}
@@ -93,24 +97,53 @@ function TemplateCard({ template, onUse }: { template: OnboardingTemplate; onUse
   )
 }
 
-function GriffinEyeModal({ onClose, onApply }: { onClose: () => void; onApply: (templateId: OnboardingTemplateId) => void }) {
+function GriffinEyeModal({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void
+  onApply: (templateId: OnboardingTemplateId, templateTitle: string) => void
+}) {
   const [prompt, setPrompt] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const cancelledRef = useRef(false)
+  const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function handleSubmit() {
-    if (!prompt.trim()) return
+  useEffect(() => {
+    cancelledRef.current = false
+    return () => {
+      cancelledRef.current = true
+      if (submitTimerRef.current) clearTimeout(submitTimerRef.current)
+    }
+  }, [])
+
+  function handleClose() {
+    cancelledRef.current = true
+    if (submitTimerRef.current) clearTimeout(submitTimerRef.current)
+    setThinking(false)
+    onClose()
+  }
+
+  async function handleSubmit() {
+    if (!prompt.trim() || thinking) return
+    setThinking(true)
+    await new Promise<void>((resolve) => {
+      submitTimerRef.current = setTimeout(resolve, 1200 + Math.random() * 800)
+    })
+    if (cancelledRef.current) return
     const match = matchTemplateFromPrompt(prompt)
-    onApply(match.id)
+    onApply(match.id, match.title)
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && handleClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="griffin-eye-title">
         <div className="modal-header">
           <div>
             <span className="eyebrow">GRIFFINEYE</span>
             <h2 id="griffin-eye-title">Describe your ideal setup</h2>
           </div>
-          <button className="close-button" onClick={onClose} aria-label="Close dialog"><X size={18} /></button>
+          <button className="close-button" onClick={handleClose} aria-label="Close dialog"><X size={18} /></button>
         </div>
         <div className="modal-body">
           <label className="griffin-eye-label">
@@ -124,10 +157,13 @@ function GriffinEyeModal({ onClose, onApply }: { onClose: () => void; onApply: (
             />
           </label>
           <div className="workflow-note">
-            <Compass size={16} />
+            <GriffinEyeIcon size={16} />
             <span><strong>GriffinEye matches you to the closest template.</strong> You can fine-tune categories and records after setup.</span>
           </div>
-          <button className="button primary full-width" onClick={handleSubmit} disabled={!prompt.trim()}><Check size={16} /> Configure my account</button>
+          {thinking && <GriffinEyeThinking message="GriffinEye is matching your setup…" />}
+          <button className="button primary full-width" onClick={handleSubmit} disabled={!prompt.trim() || thinking}>
+            <Check size={16} /> Configure my account
+          </button>
         </div>
       </div>
     </div>

@@ -1,4 +1,10 @@
-import type { OnboardingTemplateId } from './workspace-data'
+export type OnboardingTemplateId =
+  | 'fire-department'
+  | 'k12-devices'
+  | 'biomedical'
+  | 'construction'
+  | 'general-assets'
+  | 'it-inventory'
 
 export interface OnboardingTemplate {
   id: OnboardingTemplateId

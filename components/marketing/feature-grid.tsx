@@ -28,8 +28,8 @@ export function FeatureGrid() {
     <section id="features" className="border-b border-border bg-background">
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
         <div className="max-w-2xl">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Everything in one place</p>
-          <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-primary">Everything in one place</p>
+          <h2 className="mt-3 text-balance text-3xl tracking-tight text-foreground md:text-4xl">
             Built for the full lifecycle of your assets
           </h2>
         </div>
@@ -41,7 +41,7 @@ export function FeatureGrid() {
                 <Icon size={22} />
               </span>
               <div>
-                <h3 className="text-base font-bold text-foreground">{title}</h3>
+                <h3 className="text-base text-foreground">{title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
               </div>
             </div>

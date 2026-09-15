@@ -41,6 +41,7 @@ import {
   Newspaper,
   TrendingUp,
   ListChecks,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,7 @@ interface NavMenu {
   title: string
   subtitle: string
   columns: NavColumn[]
+  viewAllCta: { label: string; href: string }
 }
 
 const solutionsColumns: NavColumn[] = [
@@ -353,6 +355,7 @@ const menus: NavMenu[] = [
     title: 'Solutions',
     subtitle: 'Purpose-built tools for every part of asset management.',
     columns: solutionsColumns,
+    viewAllCta: { label: 'See all solutions', href: '/solutions' },
   },
   {
     key: 'industries',
@@ -360,6 +363,7 @@ const menus: NavMenu[] = [
     title: 'Industries',
     subtitle: 'Built for how your industry actually works.',
     columns: industriesColumns,
+    viewAllCta: { label: 'See all industries', href: '/industries' },
   },
   {
     key: 'compare',
@@ -367,6 +371,7 @@ const menus: NavMenu[] = [
     title: 'Compare',
     subtitle: 'See how AssetGriffin stacks up against the alternatives.',
     columns: [compareColumn],
+    viewAllCta: { label: 'See all comparisons', href: '/compare' },
   },
   {
     key: 'resources',
@@ -374,6 +379,7 @@ const menus: NavMenu[] = [
     title: 'Resources',
     subtitle: 'Free tools and guides for asset management.',
     columns: [resourcesColumn],
+    viewAllCta: { label: 'See all tools', href: '/resources/tutorials' },
   },
 ]
 
@@ -405,7 +411,7 @@ function NavCard({ item, onNavigate }: { item: NavItem; onNavigate: () => void }
         </span>
       )}
       <div className="min-w-0">
-        <p className={`text-sm font-semibold leading-tight ${isEnabled ? 'text-foreground' : 'text-muted-foreground/70'}`}>
+        <p className={`text-sm font-medium leading-tight ${isEnabled ? 'text-foreground' : 'text-muted-foreground/70'}`}>
           {item.label}
         </p>
         {item.description && (
@@ -416,7 +422,7 @@ function NavCard({ item, onNavigate }: { item: NavItem; onNavigate: () => void }
           </p>
         )}
         {isEnabled && (
-          <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary underline decoration-primary/40 underline-offset-2">
+          <span className="mt-0.5 inline-flex items-center gap-1 text-xs text-primary underline decoration-primary/40 underline-offset-2">
             Learn more
           </span>
         )}
@@ -446,7 +452,7 @@ function NavColumns({ columns, onNavigate }: { columns: NavColumn[]; onNavigate:
     <div className={`grid gap-8 ${columnGridClasses[columns.length] ?? ''}`}>
       {columns.map((column) => (
         <div key={column.title} className="min-w-[240px]">
-          <p className="px-2 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{column.title}</p>
+          <p className="px-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">{column.title}</p>
           <div
             className={`mt-2 grid gap-x-6 gap-y-0.5 ${
               isSingleColumn ? 'grid-cols-2 lg:grid-cols-4' : column.items.length > 4 ? 'sm:grid-cols-2' : 'grid-cols-1'
@@ -486,7 +492,7 @@ export function MarketingHeader() {
 
   return (
     <header
-      className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-sm"
+      className="relative sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-sm"
       onMouseLeave={scheduleClose}
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -498,7 +504,7 @@ export function MarketingHeader() {
             height={32}
             className="h-8 w-8 rounded-lg"
           />
-          <span className="text-[15px] font-bold tracking-tight text-foreground">AssetGriffin</span>
+          <span className="text-[15px] tracking-tight text-foreground">AssetGriffin</span>
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
@@ -529,10 +535,10 @@ export function MarketingHeader() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link href="/app" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          <Link href="/login" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
             Log in
           </Link>
-          <Button render={<Link href="/app" />} nativeButton={false} size="lg" className="h-10 rounded-lg px-4 text-sm font-semibold">
+          <Button render={<Link href="/app" />} nativeButton={false} size="lg" className="h-10 rounded-lg px-4 text-sm font-medium">
             Start free
           </Button>
         </div>
@@ -550,13 +556,13 @@ export function MarketingHeader() {
 
       {currentMenu && (
         <div
-          className="hidden border-t border-border bg-background md:block"
+          className="absolute inset-x-0 top-full z-50 hidden border border-t-0 border-border bg-background shadow-[0_12px_40px_-16px_rgba(31,35,40,0.28)] md:block"
           onMouseEnter={() => openMenu(currentMenu.key)}
         >
           <div className="mx-auto max-h-[75vh] max-w-6xl overflow-y-auto px-6 py-7">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
               <div>
-                <h2 className="text-xl font-extrabold tracking-tight text-foreground">{currentMenu.title}</h2>
+                <h2 className="text-xl font-medium! tracking-tight text-foreground">{currentMenu.title}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{currentMenu.subtitle}</p>
               </div>
               <div className="flex items-center gap-2.5">
@@ -564,19 +570,20 @@ export function MarketingHeader() {
                   render={<Link href="/contact" />}
                   nativeButton={false}
                   variant="outline"
-                  className="h-9 rounded-lg px-4 text-sm font-semibold"
+                  className="h-9 rounded-lg px-4 text-sm font-medium"
                   onClick={closeMenu}
                 >
                   Talk to sales
                 </Button>
                 <Button
-                  render={<Link href="/app" />}
+                  render={<Link href={currentMenu.viewAllCta.href} />}
                   nativeButton={false}
-                  className="h-9 rounded-lg px-4 text-sm font-semibold"
+                  variant="outline"
+                  className="h-9 gap-1.5 rounded-lg px-4 text-sm font-medium"
                   onClick={closeMenu}
                 >
-                  Start free
-                  <ArrowRight size={15} />
+                  <Sparkles size={14} />
+                  {currentMenu.viewAllCta.label}
                 </Button>
               </div>
             </div>
@@ -590,12 +597,12 @@ export function MarketingHeader() {
           <nav aria-label="Mobile" className="flex flex-col gap-6">
             {menus.map((menu) => (
               <div key={menu.key}>
-                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{menu.label}</p>
+                <p className="text-sm font-medium text-foreground">{menu.label}</p>
                 <div className="mt-3 flex flex-col gap-4">
                   {menu.columns.map((column) => (
                     <div key={column.title}>
                       {menu.columns.length > 1 && (
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                        <p className="text-[10px] font-mono uppercase tracking-[0.08em] text-muted-foreground/70">
                           {column.title}
                         </p>
                       )}
@@ -621,10 +628,10 @@ export function MarketingHeader() {
                   {link.label}
                 </a>
               ))}
-              <Link href="/app" className="text-sm font-medium text-foreground" onClick={() => setOpen(false)}>
+              <Link href="/login" className="text-sm font-medium text-foreground" onClick={() => setOpen(false)}>
                 Log in
               </Link>
-              <Button render={<Link href="/app" />} nativeButton={false} size="lg" className="h-10 w-full rounded-lg text-sm font-semibold">
+              <Button render={<Link href="/app" />} nativeButton={false} size="lg" className="h-10 w-full rounded-lg text-sm font-medium">
                 Start free
               </Button>
             </div>

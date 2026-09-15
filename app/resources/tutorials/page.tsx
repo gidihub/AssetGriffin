@@ -35,14 +35,14 @@ export default function TutorialsIndexPage() {
                   <ListChecks size={22} />
                 </span>
                 <div>
-                  <h2 className="text-base font-bold text-foreground">{tutorial.title}</h2>
+                  <h2 className="text-base text-foreground">{tutorial.title}</h2>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{tutorial.summary}</p>
                 </div>
                 <div className="mt-auto flex items-center justify-between pt-2">
                   <span className="text-xs text-muted-foreground">
                     {tutorial.steps.length} steps · ~{tutorial.minutes} min
                   </span>
-                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                  <span className="inline-flex items-center gap-1 text-sm text-primary">
                     Start
                     <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
                   </span>

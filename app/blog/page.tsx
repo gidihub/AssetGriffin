@@ -35,14 +35,14 @@ export default function BlogIndexPage() {
                 href={`/blog/${post.slug}`}
                 className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 transition-colors hover:border-primary/40"
               >
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-primary">{post.category}</span>
-                <h2 className="text-lg font-bold leading-snug text-foreground text-balance">{post.title}</h2>
+                <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-primary">{post.category}</span>
+                <h2 className="text-lg leading-snug text-foreground text-balance">{post.title}</h2>
                 <p className="text-sm leading-relaxed text-muted-foreground">{post.excerpt}</p>
                 <div className="mt-auto flex items-center justify-between pt-2">
                   <span className="text-xs text-muted-foreground">
                     {formatDate(post.date)} · {post.readTimeMinutes} min read
                   </span>
-                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                  <span className="inline-flex items-center gap-1 text-sm text-primary">
                     Read
                     <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
                   </span>

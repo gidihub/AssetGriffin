@@ -34,12 +34,12 @@ export default async function TutorialDetailPage({ params }: { params: Promise<{
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-20">
           <Link
             href="/resources/tutorials"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
           >
             <ArrowLeft size={15} />
             Back to tutorials
           </Link>
-          <h1 className="mt-6 text-balance text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+          <h1 className="mt-6 text-balance text-3xl tracking-tight text-foreground md:text-4xl">
             {tutorial.title}
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">{tutorial.summary}</p>
@@ -54,11 +54,11 @@ export default async function TutorialDetailPage({ params }: { params: Promise<{
           <ol className="flex flex-col gap-8">
             {tutorial.steps.map((step, index) => (
               <li key={step.title} className="flex gap-4">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-sm text-primary-foreground">
                   {index + 1}
                 </span>
                 <div>
-                  <h2 className="text-base font-bold text-foreground">{step.title}</h2>
+                  <h2 className="text-base text-foreground">{step.title}</h2>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
                 </div>
               </li>

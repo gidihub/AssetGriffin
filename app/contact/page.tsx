@@ -28,7 +28,7 @@ export default function ContactPage() {
                 <Mail size={18} />
               </span>
               <div>
-                <p className="text-sm font-bold text-foreground">Email us</p>
+                <p className="text-sm text-foreground">Email us</p>
                 <p className="mt-1 text-sm text-muted-foreground">hello@assetgriffin.com</p>
               </div>
             </div>
@@ -37,7 +37,7 @@ export default function ContactPage() {
                 <MessageCircle size={18} />
               </span>
               <div>
-                <p className="text-sm font-bold text-foreground">Sales & enterprise</p>
+                <p className="text-sm text-foreground">Sales & enterprise</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Tracking more than 25,000 assets, or need SSO and custom onboarding? Mention it in your message and
                   we&apos;ll route you to our enterprise team.

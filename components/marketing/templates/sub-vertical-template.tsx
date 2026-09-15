@@ -57,7 +57,7 @@ export function SubVerticalTemplate({
             {parentLabel}
           </Link>
           <ChevronRight size={12} />
-          <span className="font-semibold text-foreground">{navLabel}</span>
+          <span className="text-foreground">{navLabel}</span>
         </div>
       </div>
 
@@ -69,7 +69,7 @@ export function SubVerticalTemplate({
                 key={index}
                 className={
                   index === 0
-                    ? 'text-pretty text-lg font-semibold leading-relaxed text-foreground'
+                    ? 'text-pretty text-lg leading-relaxed text-foreground'
                     : 'text-pretty text-sm leading-relaxed text-muted-foreground'
                 }
               >
@@ -89,7 +89,7 @@ export function SubVerticalTemplate({
           <div className="mx-auto max-w-6xl px-6 py-16 md:py-20">
             <div className={`grid gap-10 md:grid-cols-2 ${index % 2 === 1 ? 'md:[&>*:first-child]:order-2' : ''}`}>
               <div className="flex flex-col justify-center gap-3">
-                <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+                <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
                   {section.heading}
                 </h2>
                 <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{section.body}</p>
@@ -102,7 +102,7 @@ export function SubVerticalTemplate({
 
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-4xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             AssetGriffin vs. spreadsheets and manual tracking
           </h2>
           <div className="mt-6">

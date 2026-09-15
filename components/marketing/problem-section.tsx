@@ -23,7 +23,7 @@ export function ProblemSection() {
     <section className="border-b border-border bg-secondary">
       <div className="mx-auto max-w-6xl px-6 py-20 md:py-24">
         <div className="max-w-2xl">
-          <h2 className="text-balance text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+          <h2 className="text-balance text-3xl tracking-tight text-foreground md:text-4xl">
             Most asset tracking tools break the moment you actually need them
           </h2>
           <p className="mt-5 text-pretty text-base leading-relaxed text-muted-foreground">
@@ -40,7 +40,7 @@ export function ProblemSection() {
                 <Icon size={22} />
               </span>
               <div>
-                <h3 className="text-base font-bold text-foreground">{title}</h3>
+                <h3 className="text-base text-foreground">{title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
               </div>
             </div>

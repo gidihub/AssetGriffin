@@ -1,6 +1,26 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const PROTECTED_PAGE_PREFIXES = ['/app']
+const PROTECTED_API_PREFIXES = [
+  '/api/griffin-extract',
+  '/api/griffin-vision',
+  '/api/assets/',
+  '/api/billing/',
+]
+const AUTH_PAGES = ['/login']
+
+function isProtectedPath(pathname: string) {
+  return (
+    PROTECTED_PAGE_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
+    PROTECTED_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  )
+}
+
+function isAuthPage(pathname: string) {
+  return AUTH_PAGES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+}
+
 /**
  * Refreshes the Supabase auth session on every request and keeps the
  * browser + server cookies in sync. Called from `proxy.ts` (the renamed
@@ -29,18 +49,30 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Do not run code between createServerClient and getUser().
-  // A simple mistake could make it very hard to debug issues with
-  // users being randomly logged out.
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  // Add route protection here once you have protected routes, e.g.:
-  // if (!user && request.nextUrl.pathname.startsWith('/app')) {
-  //   const url = request.nextUrl.clone()
-  //   url.pathname = '/login'
-  //   return NextResponse.redirect(url)
-  // }
+  const { pathname } = request.nextUrl
 
-  // IMPORTANT: return supabaseResponse as-is (or a copy of its cookies)
-  // so the refreshed session cookies actually make it to the browser.
+  if (!user && isProtectedPath(pathname)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.searchParams.set('redirect', `${pathname}${request.nextUrl.search}`)
+    return NextResponse.redirect(url)
+  }
+
+  if (user && isAuthPage(pathname)) {
+    const redirectTo = request.nextUrl.searchParams.get('redirect') || '/app'
+    const url = request.nextUrl.clone()
+    url.pathname = redirectTo.startsWith('/') ? redirectTo : '/app'
+    url.search = ''
+    return NextResponse.redirect(url)
+  }
+
   return supabaseResponse
 }

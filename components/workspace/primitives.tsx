@@ -176,14 +176,14 @@ export function EmptyState({ icon: Icon = Inbox, title, description, ctaLabel, o
   )
 }
 
-export function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+export function ToggleRow({ label, description, checked, onChange, disabled }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) {
   return (
     <div className="setting-row">
       <div>
         <strong>{label}</strong>
         <span>{description}</span>
       </div>
-      <button className={`fake-switch ${checked ? 'on' : ''}`} role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} />
+      <button className={`fake-switch ${checked ? 'on' : ''}`} role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => !disabled && onChange(!checked)} />
     </div>
   )
 }

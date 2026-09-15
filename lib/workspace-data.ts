@@ -1,3 +1,5 @@
+/** Marketing preview fixtures and shared workspace record types. Live data comes from Supabase. */
+
 export type AssetStatus = 'In use' | 'In maintenance' | 'Retired' | 'Available'
 
 export type LifecycleStage = 'Procurement' | 'Deployed' | 'In Maintenance' | 'Retired/Disposed'
@@ -96,7 +98,8 @@ export interface ReportRecord {
   summary: string
 }
 
-export const assets: AssetRecord[] = [
+/** Static rows for marketing product previews only — not used by the authenticated workspace. */
+export const previewAssets: AssetRecord[] = [
   { id: 'NST-1048', name: 'MacBook Pro 14”', category: 'Computers', assignedTo: 'Maya Patel', location: 'New York HQ', status: 'In use', purchaseDate: 'Feb 12, 2024', serial: 'C02ZK1A4MD6M', warrantyExpiration: 'Feb 12, 2027', depreciationValue: '$1,840', notes: 'Assigned during onboarding.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Feb 12, 2024', Deployed: 'Feb 20, 2024' }, itDetails: { os: 'macOS Sonoma 14.4', licenses: ['Microsoft 365 E3', 'Figma Professional'], mdmStatus: 'Enrolled', warrantyPlan: 'AppleCare+', warrantyPlanExpiration: 'Feb 12, 2027' } },
   { id: 'NST-1047', name: 'Dell Latitude 5440', category: 'Computers', assignedTo: 'Unassigned', location: 'Austin Depot', status: 'Available', purchaseDate: 'Nov 3, 2023', serial: '7XK91P2', warrantyExpiration: 'Nov 3, 2026', depreciationValue: '$620', notes: 'Returned from Jordan Lee, awaiting reissue.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Nov 3, 2023' }, itDetails: { os: 'Windows 11 Pro 23H2', licenses: ['Microsoft 365 E3'], mdmStatus: 'Enrolled', warrantyPlan: 'Dell ProSupport Plus', warrantyPlanExpiration: 'Nov 3, 2026' } },
   { id: 'NST-1041', name: 'Herman Miller Aeron', category: 'Furniture', assignedTo: 'Jordan Lee', location: 'New York HQ', status: 'In use', purchaseDate: 'May 18, 2022', serial: 'AER-88210', warrantyExpiration: 'May 18, 2032', depreciationValue: '$740', notes: '', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'May 18, 2022', Deployed: 'May 24, 2022' } },
@@ -325,65 +328,6 @@ export const inspections: InspectionRecord[] = [
     history: [{ date: 'Mar 20, 2026', status: 'Passed', notes: 'All checklist items passed.' }],
   },
 ]
-
-export type OnboardingTemplateId =
-  | 'fire-department'
-  | 'k12-devices'
-  | 'biomedical'
-  | 'construction'
-  | 'general-assets'
-  | 'it-inventory'
-
-export const templateAssetSeeds: Record<OnboardingTemplateId, AssetRecord[]> = {
-  'fire-department': [
-    { id: 'FD-0001', name: 'Pierce Enforcer Engine 12', category: 'Apparatus', assignedTo: 'Station 4 crew', location: 'Site 04', status: 'In use', purchaseDate: 'Jan 10, 2022', serial: 'PE-ENF-4471', warrantyExpiration: 'Jan 10, 2032', depreciationValue: '$612,000', notes: 'Primary response engine for Station 4.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Nov 2, 2021', Deployed: 'Jan 10, 2022' } },
-    { id: 'FD-0002', name: 'Scott Air-Pak SCBA #18', category: 'PPE', assignedTo: 'Marcus Lee', location: 'Site 04', status: 'In use', purchaseDate: 'Mar 4, 2023', serial: 'SCB-0018', warrantyExpiration: 'Mar 4, 2028', depreciationValue: '$4,200', notes: 'Due for annual flow test in October.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Feb 20, 2023', Deployed: 'Mar 4, 2023' } },
-    { id: 'FD-0003', name: 'Turnout Gear Set #204', category: 'PPE', assignedTo: 'Unassigned', location: 'Warehouse A', status: 'Available', purchaseDate: 'Jun 18, 2024', serial: 'TG-204', warrantyExpiration: 'Jun 18, 2029', depreciationValue: '$2,850', notes: 'Grant-funded, size Large.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Jun 18, 2024' } },
-    { id: 'FD-0004', name: 'Stryker Power-PRO Stretcher', category: 'Medical', assignedTo: 'Station 4 crew', location: 'Site 04', status: 'In maintenance', purchaseDate: 'Sep 2, 2021', serial: 'STK-PP-902', warrantyExpiration: 'Sep 2, 2026', depreciationValue: '$18,400', notes: 'Hydraulic lift service in progress.', lifecycleStage: 'In Maintenance', lifecycleDates: { Procurement: 'Aug 1, 2021', Deployed: 'Sep 2, 2021', 'In Maintenance': 'Sep 3, 2026' } },
-    { id: 'FD-0005', name: 'Thermal Imaging Camera TIC-7', category: 'Equipment', assignedTo: 'Unassigned', location: 'Warehouse A', status: 'Available', purchaseDate: 'Apr 14, 2023', serial: 'TIC-0007', warrantyExpiration: 'Apr 14, 2026', depreciationValue: '$9,600', notes: 'Grant-funded FLIR unit.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Apr 14, 2023' } },
-  ],
-  'k12-devices': [
-    { id: 'K12-0001', name: 'Lenovo Chromebook 100e', category: 'Tablets', assignedTo: 'Unassigned', location: 'Austin Depot', status: 'Available', purchaseDate: 'Aug 1, 2024', serial: 'LNV-100E-0451', warrantyExpiration: 'Aug 1, 2027', depreciationValue: '$210', notes: 'Ready for student check-out.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Aug 1, 2024' }, itDetails: { os: 'ChromeOS 126', licenses: ['Google Workspace for Education'], mdmStatus: 'Enrolled', warrantyPlan: 'Lenovo 3yr Depot', warrantyPlanExpiration: 'Aug 1, 2027' } },
-    { id: 'K12-0002', name: 'iPad 9th Gen', category: 'Tablets', assignedTo: 'Nora Patel', location: 'New York HQ', status: 'In use', purchaseDate: 'Sep 5, 2023', serial: 'IPD9-2201', warrantyExpiration: 'Sep 5, 2025', depreciationValue: '$260', notes: 'Assigned for 1:1 program, Grade 4.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Aug 20, 2023', Deployed: 'Sep 5, 2023' }, itDetails: { os: 'iPadOS 17.5', licenses: ['Apple School Manager'], mdmStatus: 'Enrolled', warrantyPlan: 'AppleCare+ for Education', warrantyPlanExpiration: 'Sep 5, 2025' } },
-    { id: 'K12-0003', name: 'HP ProBook 445 Cart Unit 12', category: 'Computers', assignedTo: 'Unassigned', location: 'Warehouse A', status: 'In maintenance', purchaseDate: 'Jan 15, 2022', serial: 'HP-445-0012', warrantyExpiration: 'Jan 15, 2025', depreciationValue: '$140', notes: 'Cracked screen, awaiting repair part.', lifecycleStage: 'In Maintenance', lifecycleDates: { Procurement: 'Dec 1, 2021', Deployed: 'Jan 15, 2022', 'In Maintenance': 'Sep 2, 2026' } },
-    { id: 'K12-0004', name: 'Classroom Projector Epson 2250U', category: 'Displays', assignedTo: 'Theo Grant', location: 'New York HQ', status: 'In use', purchaseDate: 'Feb 8, 2023', serial: 'EPS-2250U-88', warrantyExpiration: 'Feb 8, 2026', depreciationValue: '$780', notes: 'Room 214.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Jan 20, 2023', Deployed: 'Feb 8, 2023' } },
-    { id: 'K12-0005', name: 'Chromebook Charging Cart C', category: 'Equipment', assignedTo: 'Unassigned', location: 'Austin Depot', status: 'Available', purchaseDate: 'Jul 10, 2024', serial: 'CART-C-03', warrantyExpiration: 'Jul 10, 2029', depreciationValue: '$920', notes: 'Holds 32 devices, end-of-year return station.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Jul 10, 2024' } },
-  ],
-  biomedical: [
-    { id: 'BIO-0001', name: 'Philips IntelliVue MX450 Monitor', category: 'Equipment', assignedTo: 'Nora Patel', location: 'New York HQ', status: 'In use', purchaseDate: 'May 3, 2022', serial: 'PHL-MX450-771', warrantyExpiration: 'May 3, 2027', depreciationValue: '$14,200', notes: 'ICU bay 3.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Apr 10, 2022', Deployed: 'May 3, 2022' } },
-    { id: 'BIO-0002', name: 'Baxter Sigma Spectrum Infusion Pump', category: 'Equipment', assignedTo: 'Unassigned', location: 'Warehouse A', status: 'Available', purchaseDate: 'Oct 12, 2023', serial: 'BAX-SIG-0221', warrantyExpiration: 'Oct 12, 2026', depreciationValue: '$3,100', notes: 'Passed most recent calibration check.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Oct 12, 2023' } },
-    { id: 'BIO-0003', name: 'Welch Allyn Vital Signs Monitor', category: 'Equipment', assignedTo: 'Ava Rodriguez', location: 'London Office', status: 'In maintenance', purchaseDate: 'Feb 20, 2021', serial: 'WA-VSM-4102', warrantyExpiration: 'Feb 20, 2025', depreciationValue: '$1,850', notes: 'Preventive maintenance service in progress.', lifecycleStage: 'In Maintenance', lifecycleDates: { Procurement: 'Jan 15, 2021', Deployed: 'Feb 20, 2021', 'In Maintenance': 'Sep 4, 2026' } },
-    { id: 'BIO-0004', name: 'Fluke Biomedical ESA620 Analyzer', category: 'Tools', assignedTo: 'Field ops', location: 'Warehouse A', status: 'In use', purchaseDate: 'Jun 9, 2022', serial: 'FLK-ESA620-19', warrantyExpiration: 'Jun 9, 2027', depreciationValue: '$6,400', notes: 'Used for electrical safety testing.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'May 22, 2022', Deployed: 'Jun 9, 2022' } },
-    { id: 'BIO-0005', name: 'Drager Fabius Anesthesia Machine', category: 'Equipment', assignedTo: 'Unassigned', location: 'New York HQ', status: 'Available', purchaseDate: 'Aug 30, 2023', serial: 'DRG-FAB-330', warrantyExpiration: 'Aug 30, 2028', depreciationValue: '$41,000', notes: 'Calibration record on file.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Aug 30, 2023' } },
-  ],
-  construction: [
-    { id: 'CON-0001', name: 'CAT 320 Excavator', category: 'Equipment', assignedTo: 'Marcus Lee', location: 'Site 04', status: 'In use', purchaseDate: 'Mar 12, 2021', serial: 'CAT-320-5581', warrantyExpiration: 'Mar 12, 2026', depreciationValue: '$142,000', notes: 'Assigned to Site 04 foundation phase.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Feb 1, 2021', Deployed: 'Mar 12, 2021' } },
-    { id: 'CON-0002', name: 'DeWalt Cordless Combo Kit', category: 'Tools', assignedTo: 'Field ops', location: 'Warehouse A', status: 'Available', purchaseDate: 'Jul 22, 2024', serial: 'DWK-COMBO-441', warrantyExpiration: 'Jul 22, 2027', depreciationValue: '$620', notes: 'Includes drill, impact driver, and reciprocating saw.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Jul 22, 2024' } },
-    { id: 'CON-0003', name: 'Genie GS-1930 Scissor Lift', category: 'Equipment', assignedTo: 'Unassigned', location: 'Warehouse A', status: 'In maintenance', purchaseDate: 'Nov 4, 2020', serial: 'GEN-GS1930-88', warrantyExpiration: 'Nov 4, 2024', depreciationValue: '$8,900', notes: 'Hydraulic hose replacement in progress.', lifecycleStage: 'In Maintenance', lifecycleDates: { Procurement: 'Oct 1, 2020', Deployed: 'Nov 4, 2020', 'In Maintenance': 'Sep 6, 2026' } },
-    { id: 'CON-0004', name: 'Hilti TE 3000-AVR Breaker', category: 'Tools', assignedTo: 'Marcus Lee', location: 'Site 04', status: 'In use', purchaseDate: 'May 8, 2023', serial: 'HLT-TE3000-77', warrantyExpiration: 'May 8, 2026', depreciationValue: '$2,400', notes: 'Assigned for demolition phase.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Apr 20, 2023', Deployed: 'May 8, 2023' } },
-    { id: 'CON-0005', name: 'Ford F-350 Flatbed', category: 'Vehicles', assignedTo: 'Field ops', location: 'Site 04', status: 'In use', purchaseDate: 'Jan 30, 2022', serial: 'FD-F350-2201', warrantyExpiration: 'Jan 30, 2025', depreciationValue: '$38,500', notes: 'Fleet vehicle for material transport.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Jan 5, 2022', Deployed: 'Jan 30, 2022' } },
-  ],
-  'general-assets': [
-    { id: 'GEN-0001', name: 'MacBook Air 13”', category: 'Computers', assignedTo: 'Maya Patel', location: 'New York HQ', status: 'In use', purchaseDate: 'Feb 4, 2024', serial: 'MBA13-0091', warrantyExpiration: 'Feb 4, 2027', depreciationValue: '$980', notes: 'Standard onboarding laptop.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Jan 20, 2024', Deployed: 'Feb 4, 2024' } },
-    { id: 'GEN-0002', name: 'Office Desk 60”', category: 'Furniture', assignedTo: 'Unassigned', location: 'New York HQ', status: 'Available', purchaseDate: 'Mar 1, 2023', serial: 'DSK-60-114', warrantyExpiration: 'Mar 1, 2033', depreciationValue: '$310', notes: '', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Mar 1, 2023' } },
-    { id: 'GEN-0003', name: 'Epson Workforce Printer', category: 'Equipment', assignedTo: 'Jordan Lee', location: 'London Office', status: 'In maintenance', purchaseDate: 'Jun 15, 2022', serial: 'EPS-WF-552', warrantyExpiration: 'Jun 15, 2025', depreciationValue: '$140', notes: 'Paper feed jam reported.', lifecycleStage: 'In Maintenance', lifecycleDates: { Procurement: 'May 30, 2022', Deployed: 'Jun 15, 2022', 'In Maintenance': 'Sep 5, 2026' } },
-    { id: 'GEN-0004', name: 'iPhone 14', category: 'Mobile', assignedTo: 'Theo Grant', location: 'New York HQ', status: 'In use', purchaseDate: 'Oct 9, 2023', serial: 'IP14-2287', warrantyExpiration: 'Oct 9, 2025', depreciationValue: '$620', notes: '', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Sep 25, 2023', Deployed: 'Oct 9, 2023' } },
-    { id: 'GEN-0005', name: 'Conference Room Display 65”', category: 'Displays', assignedTo: 'Unassigned', location: 'Austin Depot', status: 'Available', purchaseDate: 'Aug 4, 2024', serial: 'CRD-65-009', warrantyExpiration: 'Aug 4, 2027', depreciationValue: '$1,120', notes: '', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Aug 4, 2024' } },
-  ],
-  'it-inventory': [
-    { id: 'IT-0001', name: 'Dell OptiPlex 7020 Desktop', category: 'Computers', assignedTo: 'Ava Rodriguez', location: 'London Office', status: 'In use', purchaseDate: 'Jan 18, 2023', serial: 'DL-OP7020-341', warrantyExpiration: 'Jan 18, 2026', depreciationValue: '$540', notes: 'Standard issue desktop.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Jan 4, 2023', Deployed: 'Jan 18, 2023' }, itDetails: { os: 'Windows 11 Pro 23H2', licenses: ['Microsoft 365 E3'], mdmStatus: 'Enrolled', warrantyPlan: 'Dell ProSupport', warrantyPlanExpiration: 'Jan 18, 2026' } },
-    { id: 'IT-0002', name: 'Lenovo ThinkCentre Server Node 2', category: 'Computers', assignedTo: 'Unassigned', location: 'Austin Depot', status: 'Available', purchaseDate: 'Sep 2, 2022', serial: 'LNV-TC-SRV2', warrantyExpiration: 'Sep 2, 2027', depreciationValue: '$1,940', notes: 'Rack unit 4, spare capacity.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Sep 2, 2022' }, itDetails: { os: 'Windows Server 2022', licenses: ['Windows Server CAL'], mdmStatus: 'Enrolled', warrantyPlan: 'Lenovo Premier Support', warrantyPlanExpiration: 'Sep 2, 2027' } },
-    { id: 'IT-0003', name: 'Cisco Catalyst 9200 Switch', category: 'Equipment', assignedTo: 'Field ops', location: 'Warehouse A', status: 'In use', purchaseDate: 'Apr 11, 2021', serial: 'CSC-9200-118', warrantyExpiration: 'Apr 11, 2024', depreciationValue: '$2,280', notes: 'Core switch, Warehouse A.', lifecycleStage: 'Deployed', lifecycleDates: { Procurement: 'Mar 30, 2021', Deployed: 'Apr 11, 2021' } },
-    { id: 'IT-0004', name: 'Dell U2419H Monitor', category: 'Displays', assignedTo: 'Maya Patel', location: 'New York HQ', status: 'In maintenance', purchaseDate: 'Dec 5, 2022', serial: 'DL-U2419H-902', warrantyExpiration: 'Dec 5, 2025', depreciationValue: '$130', notes: 'Flickering panel reported.', lifecycleStage: 'In Maintenance', lifecycleDates: { Procurement: 'Nov 18, 2022', Deployed: 'Dec 5, 2022', 'In Maintenance': 'Sep 7, 2026' } },
-    { id: 'IT-0005', name: 'iPhone 13 (IT loaner pool)', category: 'Mobile', assignedTo: 'Unassigned', location: 'New York HQ', status: 'Available', purchaseDate: 'Feb 27, 2023', serial: 'IP13-LOAN-06', warrantyExpiration: 'Feb 27, 2025', depreciationValue: '$390', notes: 'Loaner pool device for travel.', lifecycleStage: 'Procurement', lifecycleDates: { Procurement: 'Feb 27, 2023' }, itDetails: { os: 'iOS 17.4', licenses: [], mdmStatus: 'Enrolled', warrantyPlan: 'AppleCare+', warrantyPlanExpiration: 'Feb 27, 2025' } },
-  ],
-}
-
-export function applyTemplateSeed(templateId: OnboardingTemplateId) {
-  const seed = templateAssetSeeds[templateId]
-  if (!seed) return
-  assets.splice(0, assets.length, ...seed.map((asset) => ({ ...asset })))
-}
 
 export const statusToneMap: Record<string, 'positive' | 'warning' | 'critical' | 'neutral' | 'info'> = {
   'In use': 'info',

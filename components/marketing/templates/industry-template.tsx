@@ -40,7 +40,7 @@ export function IndustryTemplate({
 
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-6xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             Built for how {industryName} actually work
           </h2>
           <div className="mt-8 grid gap-5 md:grid-cols-2">
@@ -53,7 +53,7 @@ export function IndustryTemplate({
 
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-4xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             AssetGriffin vs. spreadsheets and manual tracking
           </h2>
           <div className="mt-6">
@@ -64,7 +64,7 @@ export function IndustryTemplate({
 
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-4xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             How this looks in practice
           </h2>
           <div className="mt-6">

@@ -1,0 +1,246 @@
+import { recordAuditEvent } from '@/lib/griffineye-audit'
+import { getGroupBySlug } from '@/lib/groups-db'
+import type { DbActionEvent, DbActionType } from '@/lib/schema-types'
+import { requireUserProfile } from '@/lib/supabase/session'
+
+export type ChecklistItemConfig = {
+  id: string
+  label: string
+  required?: boolean
+}
+
+export type ActionTypeConfig = {
+  prompt?: string
+  value?: string
+  due_date_field?: string
+  status_on_open?: string
+  status_on_complete?: string
+  checklist_items?: ChecklistItemConfig[]
+  pass_status?: string
+  fail_status?: string
+}
+
+export type PerformActionInput = {
+  slug: string
+  recordId: string
+  actionTypeId: string
+  values?: Record<string, unknown>
+  notes?: string
+}
+
+export type ActionEventRow = {
+  id: string
+  actionTypeId: string
+  actionName: string
+  performedAt: string
+  performedBy: string | null
+  data: Record<string, unknown>
+}
+
+function asConfig(raw: Record<string, unknown>): ActionTypeConfig {
+  return raw as ActionTypeConfig
+}
+
+export async function listActionTypesForGroup(groupId: string): Promise<DbActionType[]> {
+  const { supabase } = await requireUserProfile()
+  const { data, error } = await supabase
+    .from('action_types')
+    .select('*')
+    .eq('group_id', groupId)
+    .order('sort_order', { ascending: true })
+
+  if (error) throw new Error(error.message)
+  return (data ?? []) as DbActionType[]
+}
+
+export async function listActionEventsForRecord(recordId: string, limit = 20): Promise<ActionEventRow[]> {
+  const { supabase } = await requireUserProfile()
+  const { data, error } = await supabase
+    .from('action_events')
+    .select('id, action_type_id, performed_at, performed_by, data, action_types(name)')
+    .eq('record_id', recordId)
+    .order('performed_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(error.message)
+
+  return (data ?? []).map((row) => {
+    const joined = row as unknown as {
+      id: string
+      action_type_id: string
+      performed_at: string
+      performed_by: string | null
+      data: Record<string, unknown> | null
+      action_types: { name: string } | null
+    }
+    return {
+      id: joined.id,
+      actionTypeId: joined.action_type_id,
+      actionName: joined.action_types?.name ?? 'Action',
+      performedAt: joined.performed_at,
+      performedBy: joined.performed_by,
+      data: joined.data ?? {},
+    }
+  })
+}
+
+function checklistResultsFromValues(
+  items: ChecklistItemConfig[],
+  values: Record<string, unknown>,
+): Array<{ item: string; pass: boolean }> {
+  return items.map((item) => ({
+    item: item.label,
+    pass: Boolean(values[item.id]),
+  }))
+}
+
+function applyActionToRecordData(
+  actionType: DbActionType,
+  current: Record<string, unknown>,
+  values: Record<string, unknown>,
+  groupFieldKeys: ReadonlySet<string>,
+): Record<string, unknown> {
+  const config = asConfig(actionType.config ?? {})
+  const next = { ...current }
+
+  if (
+    !config.value &&
+    actionType.open_field &&
+    values[actionType.open_field] !== undefined
+  ) {
+    next[actionType.open_field] = values[actionType.open_field]
+  }
+
+  if (config.checklist_items?.length) {
+    const results = checklistResultsFromValues(config.checklist_items, values)
+    next[actionType.open_field ?? 'results'] = results
+    const requiredFailed = config.checklist_items.some(
+      (item) => item.required && !values[item.id],
+    )
+    if (!requiredFailed && config.pass_status) {
+      const today = new Date().toISOString().slice(0, 10)
+      if ('last_completed' in next) {
+        next.last_completed = today
+      }
+    }
+  } else if (config.due_date_field && values[config.due_date_field]) {
+    next[config.due_date_field] = values[config.due_date_field]
+    if (actionType.change_field && config.status_on_open) {
+      next[actionType.change_field] = config.status_on_open
+    }
+  } else if (actionType.change_field) {
+    if (config.value) next[actionType.change_field] = config.value
+    else if (values[actionType.change_field] !== undefined) {
+      next[actionType.change_field] = values[actionType.change_field]
+    } else if (config.status_on_complete) {
+      next[actionType.change_field] = config.status_on_complete
+    }
+  }
+
+  return next
+}
+
+export async function performRecordAction(input: PerformActionInput) {
+  const { supabase, profile } = await requireUserProfile()
+  const group = await getGroupBySlug(input.slug)
+  if (!group) throw new Error('Group not found.')
+
+  const { data: actionType, error: typeError } = await supabase
+    .from('action_types')
+    .select('*')
+    .eq('id', input.actionTypeId)
+    .eq('group_id', group.id)
+    .maybeSingle()
+
+  if (typeError) throw new Error(typeError.message)
+  if (!actionType) throw new Error('Action type not found.')
+
+  const { data: record, error: recordError } = await supabase
+    .from('records')
+    .select('*')
+    .eq('id', input.recordId)
+    .eq('group_id', group.id)
+    .eq('organization_id', profile.organization_id)
+    .maybeSingle()
+
+  if (recordError) throw new Error(recordError.message)
+  if (!record) throw new Error('Record not found.')
+
+  const { data: fieldRows, error: fieldsError } = await supabase
+    .from('fields')
+    .select('key')
+    .eq('group_id', group.id)
+
+  if (fieldsError) throw new Error(fieldsError.message)
+
+  const groupFieldKeys = new Set((fieldRows ?? []).map((field) => String(field.key)))
+  const values = input.values ?? {}
+  const previousData = (record.data ?? {}) as Record<string, unknown>
+  const nextData = applyActionToRecordData(
+    actionType as DbActionType,
+    previousData,
+    values,
+    groupFieldKeys,
+  )
+
+  const { data: updated, error: updateError } = await supabase
+    .from('records')
+    .update({ data: nextData })
+    .eq('id', input.recordId)
+    .eq('group_id', group.id)
+    .select('*')
+    .single()
+
+  if (updateError) throw new Error(updateError.message)
+
+  const eventPayload = {
+    values,
+    notes: input.notes?.trim() || null,
+    previous: previousData,
+    next: nextData,
+  }
+
+  const { data: event, error: eventError } = await supabase
+    .from('action_events')
+    .insert({
+      organization_id: profile.organization_id,
+      record_id: input.recordId,
+      action_type_id: input.actionTypeId,
+      performed_by: profile.id,
+      data: eventPayload,
+    })
+    .select('id, performed_at')
+    .single()
+
+  if (eventError) throw new Error(eventError.message)
+
+  const actorLabel = profile.full_name?.trim() || profile.email || 'Workspace member'
+  const recordLabel = String(nextData.name ?? nextData.asset_tag ?? input.recordId)
+
+  await recordAuditEvent(supabase, profile.organization_id, {
+    category: 'record',
+    action: `action:${(actionType as DbActionType).name}`,
+    source: 'manual',
+    actorId: profile.id,
+    actorLabel,
+    entityType: 'record',
+    entityId: input.recordId,
+    entityLabel: recordLabel,
+    summary: `${(actionType as DbActionType).name} on ${recordLabel}`,
+    metadata: { action_type_id: input.actionTypeId, action_event_id: event.id },
+  })
+
+  return {
+    record: updated,
+    event: {
+      id: event.id,
+      organization_id: profile.organization_id,
+      record_id: input.recordId,
+      action_type_id: input.actionTypeId,
+      performed_by: profile.id,
+      performed_at: event.performed_at,
+      data: eventPayload,
+    } satisfies DbActionEvent,
+    actionName: (actionType as DbActionType).name,
+  }
+}

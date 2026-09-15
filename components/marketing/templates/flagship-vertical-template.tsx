@@ -3,7 +3,7 @@ import { ArrowUpRight, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CtaBand } from '@/components/marketing/cta-band'
 import { FaqAccordion, type FaqItem } from '@/components/marketing/faq-accordion'
-import { TestimonialPlaceholder } from '@/components/marketing/testimonial-placeholder'
+import { BetaInvite } from '@/components/marketing/beta-invite'
 import { ProductPreview, type ProductPreviewScreen } from '@/components/marketing/product-preview'
 import { StatusBadge } from '@/components/workspace/primitives'
 
@@ -76,12 +76,12 @@ export function FlagshipVerticalTemplate({
               {parentLabel}
             </Link>
             <ChevronRight size={12} />
-            <span className="font-semibold text-foreground">{navLabel}</span>
+            <span className="text-foreground">{navLabel}</span>
           </div>
           <div className="mt-8 grid gap-12 md:grid-cols-[1.15fr_1fr] md:items-center">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">{eyebrow}</p>
-              <h1 className="mt-4 text-balance text-3xl font-extrabold leading-tight tracking-tight text-foreground md:text-4xl">
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-primary">{eyebrow}</p>
+              <h1 className="mt-4 text-balance text-3xl font-normal leading-tight tracking-tight text-foreground md:text-4xl">
                 {headline}
               </h1>
               <p className="mt-5 text-pretty text-base leading-relaxed text-muted-foreground">{subhead}</p>
@@ -89,7 +89,7 @@ export function FlagshipVerticalTemplate({
                 render={<Link href="/app" />}
                 nativeButton={false}
                 size="lg"
-                className="mt-8 h-12 rounded-lg px-6 text-[15px] font-semibold"
+                className="mt-8 h-12 rounded-lg px-6 text-[15px] font-medium"
               >
                 Start free — import your assets in minutes <ArrowUpRight size={18} />
               </Button>
@@ -101,7 +101,7 @@ export function FlagshipVerticalTemplate({
                   className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm"
                   style={{ marginLeft: index % 2 === 1 ? '1.5rem' : 0 }}
                 >
-                  <span className="text-sm font-semibold text-foreground">{card.item}</span>
+                  <span className="text-sm text-foreground">{card.item}</span>
                   <StatusBadge status={card.status} />
                 </div>
               ))}
@@ -113,14 +113,14 @@ export function FlagshipVerticalTemplate({
       {/* 2. The challenge */}
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-4xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             The challenge
           </h2>
           <ul className="mt-6 flex flex-col gap-3">
             {challengeBullets.map((bullet) => (
               <li
                 key={bullet}
-                className="flex items-start gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm font-semibold text-foreground"
+                className="flex items-start gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm text-foreground"
               >
                 <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" />
                 {bullet}
@@ -134,13 +134,13 @@ export function FlagshipVerticalTemplate({
       {/* 3. The solution */}
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-6xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             The solution
           </h2>
           <div className="mt-8 grid gap-5 md:grid-cols-2">
             {solutionSections.map((section) => (
               <div key={section.heading} className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-7">
-                <h3 className="text-base font-bold text-foreground">{section.heading}</h3>
+                <h3 className="text-base text-foreground">{section.heading}</h3>
                 <ul className="flex flex-col gap-2">
                   {section.bullets.map((bullet) => (
                     <li key={bullet} className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
@@ -165,7 +165,7 @@ export function FlagshipVerticalTemplate({
       {/* 4. Flexible by design */}
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-6xl px-6 py-16 md:py-20">
-          <h2 className="text-balance text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          <h2 className="text-balance text-2xl tracking-tight text-foreground md:text-3xl">
             Flexible by design
           </h2>
           <div className="mt-8 grid gap-10 md:grid-cols-2">
@@ -173,7 +173,7 @@ export function FlagshipVerticalTemplate({
             <ul className="flex flex-col gap-5">
               {flexiblePoints.map((point) => (
                 <li key={point.label}>
-                  <strong className="text-sm font-bold text-foreground">{point.label}</strong>
+                  <strong className="text-sm font-normal text-foreground">{point.label}</strong>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{point.body}</p>
                 </li>
               ))}
@@ -182,10 +182,10 @@ export function FlagshipVerticalTemplate({
         </div>
       </section>
 
-      {/* 5. Testimonial placeholder */}
+      {/* 5. Beta invite */}
       <section className="border-b border-border bg-secondary">
         <div className="mx-auto max-w-3xl px-6 py-16 md:py-20">
-          <TestimonialPlaceholder />
+          <BetaInvite />
         </div>
       </section>
 
