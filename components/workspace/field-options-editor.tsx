@@ -56,6 +56,23 @@ export function FieldOptionsEditor({
     )
   }
 
+  if (fieldType === 'json' && deprecated) {
+    return (
+      <div className="field-options-stack field-options-deprecated">
+        <span className="field-options-badge">Deprecated field</span>
+        <p className="field-options-deprecated-copy">
+          Legacy data may still exist on old records. This field is hidden when empty and is not used for new
+          imports.
+        </p>
+        <FieldOptionsDescription
+          optionsText={optionsText}
+          onChange={onChange}
+          placeholder="Why this field is deprecated"
+        />
+      </div>
+    )
+  }
+
   if (fieldType === 'json' && hasSuggested) {
     return (
       <div className="field-options-stack">
@@ -73,23 +90,6 @@ export function FieldOptionsEditor({
           optionsText={optionsText}
           onChange={onChange}
           placeholder="Shown as helper text when editing this field"
-        />
-      </div>
-    )
-  }
-
-  if (fieldType === 'json' && deprecated) {
-    return (
-      <div className="field-options-stack field-options-deprecated">
-        <span className="field-options-badge">Deprecated field</span>
-        <p className="field-options-deprecated-copy">
-          Legacy data may still exist on old records. This field is hidden when empty and is not used for new
-          imports.
-        </p>
-        <FieldOptionsDescription
-          optionsText={optionsText}
-          onChange={onChange}
-          placeholder="Why this field is deprecated"
         />
       </div>
     )

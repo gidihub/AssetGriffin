@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { ArrowUpFromLine, FileSpreadsheet, X } from 'lucide-react'
+import { useAccessibleDialog } from '@/lib/use-accessible-dialog'
 import {
   RECORD_EXPORT_FORMATS,
   type RecordExportFormat,
@@ -35,6 +36,7 @@ export function ExportModal({
   const [includeFiles, setIncludeFiles] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dialogRef = useAccessibleDialog(onClose)
 
   async function handleExport() {
     setSubmitting(true)
@@ -57,7 +59,14 @@ export function ExportModal({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+      <div
+        ref={dialogRef}
+        className="modal export-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-modal-title"
+        tabIndex={-1}
+      >
         <div className="modal-header">
           <div>
             <span className="eyebrow">EXPORT</span>

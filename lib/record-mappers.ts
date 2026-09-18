@@ -87,7 +87,7 @@ export function intakeDraftToRecordData(draft: AssetIntakeDraft): Record<string,
   const categoryFromDraft = draft.categoryHint || intakeCategoryMap[draft.category] || 'Equipment'
   const base: Record<string, unknown> = {
     asset_tag: assetTag,
-    name: draft.cleanName || name,
+    name,
     category: categoryFromDraft,
     assigned_to: draft.assignedTo?.trim() || 'Unassigned',
     location: draft.location?.trim() ?? '',

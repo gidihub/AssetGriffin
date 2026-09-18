@@ -15,6 +15,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const FETCH_TIMEOUT_MS = 15_000
 const MAX_REDIRECTS = 5
+const MAX_IMPORT_PHOTOS_PER_REQUEST = 50
+const IMPORT_PHOTO_TIME_BUDGET_MS = 60_000
+const IMPORT_PHOTO_CONCURRENCY = 3
 
 function mimeFromBuffer(buffer: Buffer): string | null {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
@@ -308,12 +311,17 @@ async function fetchImportPhotoResponse(
   return { error: 'Photo URL redirected too many times.' }
 }
 
+async function cancelResponseBody(response: PinnedPhotoResponse): Promise<void> {
+  await response.body?.cancel().catch(() => undefined)
+}
+
 async function readResponseBodyWithLimit(
   response: PinnedPhotoResponse,
   maxBytes: number,
 ): Promise<Buffer | { error: string }> {
   const contentLength = Number(response.headers.get('content-length') ?? 0)
   if (contentLength > maxBytes) {
+    await cancelResponseBody(response)
     return { error: 'Photo exceeds the 2 MB limit.' }
   }
 
@@ -362,6 +370,7 @@ export async function fetchImportPhotoBuffer(
 
     const response = responseOrError
     if (response.status < 200 || response.status >= 300) {
+      await cancelResponseBody(response)
       return { error: `Photo download failed (HTTP ${response.status}).` }
     }
 
@@ -401,63 +410,99 @@ export type ImportPhotoHydrationResult = {
  * (see importAssetsWithPhotosForCurrentOrg); appends to any existing asset_photos
  * atomically per record via append_record_asset_photo.
  */
+async function hydrateSingleImportPhoto(
+  supabase: SupabaseClient,
+  organizationId: string,
+  item: { recordId: string; photoUrl: string; assetTag: string },
+): Promise<'attached' | 'skipped' | { failed: string }> {
+  const normalizedUrl = normalizeImportPhotoUrl(item.photoUrl)
+  if (!normalizedUrl) {
+    return 'skipped'
+  }
+
+  const fetched = await fetchImportPhotoBuffer(normalizedUrl)
+  if ('error' in fetched) {
+    return { failed: fetched.error }
+  }
+
+  const photoId = crypto.randomUUID()
+  const { storagePath } = await uploadAssetPhotoObject(
+    supabase,
+    organizationId,
+    item.recordId,
+    fetched.buffer,
+    fetched.mimeType,
+    photoId,
+  )
+
+  const storedPhoto: StoredAssetPhoto = {
+    id: photoId,
+    storagePath,
+    name: 'Imported photo',
+    primary: true,
+    addedAt: new Date().toISOString(),
+  }
+
+  const { error: appendError } = await supabase.rpc('append_record_asset_photo', {
+    p_record_id: item.recordId,
+    p_photo: storedPhoto,
+  })
+
+  if (appendError) {
+    return { failed: appendError.message }
+  }
+
+  return 'attached'
+}
+
 export async function hydrateImportRecordPhotos(
   supabase: SupabaseClient,
   organizationId: string,
   items: Array<{ recordId: string; photoUrl: string; assetTag: string }>,
 ): Promise<ImportPhotoHydrationResult> {
   const result: ImportPhotoHydrationResult = { attached: 0, skipped: 0, failed: [] }
+  const startedAt = Date.now()
+  const cappedItems = items.slice(0, MAX_IMPORT_PHOTOS_PER_REQUEST)
+  result.skipped += Math.max(0, items.length - cappedItems.length)
 
-  for (const item of items) {
-    const normalizedUrl = normalizeImportPhotoUrl(item.photoUrl)
-    if (!normalizedUrl) {
-      result.skipped += 1
-      continue
-    }
+  let cursor = 0
+  let timedOut = false
 
-    const fetched = await fetchImportPhotoBuffer(normalizedUrl)
-    if ('error' in fetched) {
-      result.failed.push({ assetTag: item.assetTag, reason: fetched.error })
-      continue
-    }
-
-    try {
-      const photoId = crypto.randomUUID()
-      const { storagePath } = await uploadAssetPhotoObject(
-        supabase,
-        organizationId,
-        item.recordId,
-        fetched.buffer,
-        fetched.mimeType,
-        photoId,
-      )
-
-      const storedPhoto: StoredAssetPhoto = {
-        id: photoId,
-        storagePath,
-        name: 'Imported photo',
-        primary: true,
-        addedAt: new Date().toISOString(),
+  async function worker() {
+    while (cursor < cappedItems.length) {
+      if (Date.now() - startedAt > IMPORT_PHOTO_TIME_BUDGET_MS) {
+        if (!timedOut) {
+          timedOut = true
+          result.skipped += cappedItems.length - cursor
+        }
+        break
       }
 
-      const { error: appendError } = await supabase.rpc('append_record_asset_photo', {
-        p_record_id: item.recordId,
-        p_photo: storedPhoto,
-      })
+      const index = cursor
+      cursor += 1
+      const item = cappedItems[index]
 
-      if (appendError) {
-        result.failed.push({ assetTag: item.assetTag, reason: appendError.message })
-        continue
+      try {
+        const outcome = await hydrateSingleImportPhoto(supabase, organizationId, item)
+        if (outcome === 'attached') {
+          result.attached += 1
+        } else if (outcome === 'skipped') {
+          result.skipped += 1
+        } else {
+          result.failed.push({ assetTag: item.assetTag, reason: outcome.failed })
+        }
+      } catch (error) {
+        result.failed.push({
+          assetTag: item.assetTag,
+          reason: error instanceof Error ? error.message : 'Could not attach photo.',
+        })
       }
-
-      result.attached += 1
-    } catch (error) {
-      result.failed.push({
-        assetTag: item.assetTag,
-        reason: error instanceof Error ? error.message : 'Could not attach photo.',
-      })
     }
   }
+
+  await Promise.all(
+    Array.from({ length: Math.min(IMPORT_PHOTO_CONCURRENCY, cappedItems.length) }, () => worker()),
+  )
 
   return result
 }

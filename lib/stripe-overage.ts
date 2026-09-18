@@ -17,8 +17,6 @@ export type OverageInvoiceResult =
   | { status: 'queued'; reason: 'missing_stripe_customer' | 'missing_stripe_key' }
   | { status: 'skipped'; reason: 'no_overage' | 'test_or_disabled' }
 
-const OVERAGE_SETTINGS_KEY = 'griffineyeOverageInvoices'
-
 type OverageInvoicePeriodState = {
   invoiceItemId: string
   syncedScanCount: number
@@ -85,6 +83,34 @@ async function saveOverageInvoiceState(
   })
 
   if (error) throw new Error(error.message)
+}
+
+async function withOverageBillingLock<T>(
+  organizationId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const admin = createAdminClient()
+  const { data: leaseToken, error: lockError } = await admin.rpc('acquire_griffineye_overage_billing_lock', {
+    p_org_id: organizationId,
+  })
+  if (lockError) throw new Error(lockError.message)
+  if (!leaseToken) {
+    throw new Error('GriffinEye overage billing already in progress for this organization')
+  }
+
+  try {
+    return await fn()
+  } finally {
+    const { data: released, error: releaseError } = await admin.rpc(
+      'release_griffineye_overage_billing_lock',
+      { p_org_id: organizationId, p_lease_token: leaseToken },
+    )
+    if (releaseError) {
+      console.error('[stripe-overage] failed to release billing lease', releaseError.message)
+    } else if (released !== true) {
+      console.error('[stripe-overage] billing lease was not held at release time')
+    }
+  }
 }
 
 function overageInvoiceItemIdempotencyKey(
@@ -155,7 +181,43 @@ async function resolveBillableOverageCount(
   return { billableCount, state: nextState }
 }
 
-export async function queueOverageScanInvoiceItem(
+function isFinalizedInvoiceItemError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const message = 'message' in error ? String(error.message) : ''
+  return message.includes('already been attached') || message.includes('not editable')
+}
+
+async function createOverageInvoiceItem(
+  stripe: Stripe,
+  customerId: string,
+  organizationId: string,
+  billingPeriod: string,
+  amountCents: number,
+  description: string,
+  metadata: Record<string, string>,
+  persistedState: OverageInvoicePeriodState | null,
+  currentCount: number,
+): Promise<Stripe.InvoiceItem> {
+  return stripe.invoiceItems.create(
+    {
+      customer: customerId,
+      amount: amountCents,
+      currency: 'usd',
+      description,
+      metadata,
+    },
+    {
+      idempotencyKey: overageInvoiceItemIdempotencyKey(
+        organizationId,
+        billingPeriod,
+        persistedState?.syncedScanCount ?? 0,
+        currentCount,
+      ),
+    },
+  )
+}
+
+async function queueOverageScanInvoiceItemInner(
   supabase: SupabaseClient,
   organizationId: string,
 ): Promise<OverageInvoiceResult> {
@@ -197,9 +259,9 @@ export async function queueOverageScanInvoiceItem(
     return { status: 'skipped', reason: 'no_overage' }
   }
 
-  const amountCents = Math.round(GRIFFIN_SCAN_OVERAGE_RATE_USD * 100 * billableCount)
-  const description = `GriffinEye overage · ${billableCount} scan${billableCount === 1 ? '' : 's'} @ $${GRIFFIN_SCAN_OVERAGE_RATE_USD.toFixed(2)}/scan (${billingPeriod})`
-  const metadata = {
+  let amountCents = Math.round(GRIFFIN_SCAN_OVERAGE_RATE_USD * 100 * billableCount)
+  let description = `GriffinEye overage · ${billableCount} scan${billableCount === 1 ? '' : 's'} @ $${GRIFFIN_SCAN_OVERAGE_RATE_USD.toFixed(2)}/scan (${billingPeriod})`
+  let metadata: Record<string, string> = {
     organization_id: organizationId,
     purchase_type: 'griffineye_overage',
     billing_period: billingPeriod,
@@ -222,36 +284,57 @@ export async function queueOverageScanInvoiceItem(
   }
 
   if (pendingItem) {
-    const item = await stripe.invoiceItems.update(pendingItem.id, {
-      amount: amountCents,
-      description,
-      metadata,
-    })
+    try {
+      const item = await stripe.invoiceItems.update(pendingItem.id, {
+        amount: amountCents,
+        description,
+        metadata,
+      })
 
-    await saveOverageInvoiceState(organizationId, billingPeriod, {
-      invoiceItemId: item.id,
-      syncedScanCount: persistedState?.syncedScanCount ?? 0,
-    })
+      await saveOverageInvoiceState(organizationId, billingPeriod, {
+        invoiceItemId: item.id,
+        syncedScanCount: persistedState?.syncedScanCount ?? 0,
+      })
 
-    return { status: 'invoiced', invoiceItemId: item.id }
+      return { status: 'invoiced', invoiceItemId: item.id }
+    } catch (updateError) {
+      if (!isFinalizedInvoiceItemError(updateError)) {
+        throw updateError
+      }
+      const finalized = await stripe.invoiceItems.retrieve(pendingItem.id)
+      const finalizedCount = Number(finalized.metadata?.scan_count ?? 0)
+      const syncedScanCount = Math.max(
+        persistedState?.syncedScanCount ?? 0,
+        Number.isFinite(finalizedCount) ? finalizedCount : 0,
+      )
+      persistedState = { invoiceItemId: '', syncedScanCount }
+      await saveOverageInvoiceState(organizationId, billingPeriod, persistedState)
+
+      const remainingBillable = currentCount - syncedScanCount
+      if (remainingBillable <= 0) {
+        return { status: 'skipped', reason: 'no_overage' }
+      }
+
+      amountCents = Math.round(GRIFFIN_SCAN_OVERAGE_RATE_USD * 100 * remainingBillable)
+      description = `GriffinEye overage · ${remainingBillable} scan${remainingBillable === 1 ? '' : 's'} @ $${GRIFFIN_SCAN_OVERAGE_RATE_USD.toFixed(2)}/scan (${billingPeriod})`
+      metadata = {
+        ...metadata,
+        scan_count: String(currentCount),
+        billable_scan_count: String(remainingBillable),
+      }
+    }
   }
 
-  const item = await stripe.invoiceItems.create(
-    {
-      customer: customerId,
-      amount: amountCents,
-      currency: 'usd',
-      description,
-      metadata,
-    },
-    {
-      idempotencyKey: overageInvoiceItemIdempotencyKey(
-        organizationId,
-        billingPeriod,
-        persistedState?.syncedScanCount ?? 0,
-        currentCount,
-      ),
-    },
+  const item = await createOverageInvoiceItem(
+    stripe,
+    customerId,
+    organizationId,
+    billingPeriod,
+    amountCents,
+    description,
+    metadata,
+    persistedState,
+    currentCount,
   )
 
   await saveOverageInvoiceState(organizationId, billingPeriod, {
@@ -260,4 +343,13 @@ export async function queueOverageScanInvoiceItem(
   })
 
   return { status: 'invoiced', invoiceItemId: item.id }
+}
+
+export async function queueOverageScanInvoiceItem(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<OverageInvoiceResult> {
+  return withOverageBillingLock(organizationId, () =>
+    queueOverageScanInvoiceItemInner(supabase, organizationId),
+  )
 }

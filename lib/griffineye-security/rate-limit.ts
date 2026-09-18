@@ -2,7 +2,9 @@
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+  if (!Number.isFinite(parsed)) return fallback
+  const floored = Math.floor(parsed)
+  return floored > 0 ? floored : fallback
 }
 
 export const GRIFFINEYE_RATE_LIMIT_RPM = parsePositiveInt(process.env.GRIFFINEYE_RATE_LIMIT_RPM, 20)

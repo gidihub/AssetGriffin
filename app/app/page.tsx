@@ -16,12 +16,10 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  MoreHorizontal,
   Package,
   Plus,
   QrCode,
   Search,
-  Settings2,
   ShieldCheck,
   Upload,
   UserRound,
@@ -42,7 +40,7 @@ import { type GriffinEyeNavTarget, type GriffinEyeObservation } from '@/lib/grif
 import type { DataGapSummary } from '@/lib/griffineye-agent/tools'
 import type { DbAuditLogRow } from '@/lib/griffineye-audit'
 import { onboardingTemplates } from '@/lib/onboarding-templates'
-import { logout } from '@/app/login/actions'
+import { SidebarProfileMenu } from '@/components/workspace/sidebar-profile-menu'
 import { invalidateGroupPage } from '@/lib/group-page-cache'
 import { normalizeRecordRef } from '@/lib/record-mappers'
 import { saveIntakeAsset } from '@/lib/save-intake-asset'
@@ -504,21 +502,15 @@ export default function Page() {
               <button className="nav-item" onClick={() => { openGroupSlug('assets'); setScanTrigger((n) => n + 1) }}><QrCode size={17} /><span>Scan asset</span></button>
             </div>
           </div>
-          <div className="nav-group admin-group">
-            <button className={`nav-item ${activeNav === 'Settings' ? 'active' : ''}`} onClick={() => navigateToSettings('Profile')}>
-              <Settings2 size={17} /><span>Settings</span>
-            </button>
-          </div>
         </nav>
         <div className="sidebar-bottom">
           <div className="upgrade-card"><div className="upgrade-icon"><GriffinEyeIcon size={16} /></div><strong>Make your next move</strong><p>{totalAssets > 0 ? `GriffinEye is tracking ${totalAssets.toLocaleString()} assets in your workspace.` : 'GriffinEye is ready to process your first assets.'}</p><button onClick={() => setShowIntake(true)}>Add assets <ArrowUpRight size={14} /></button></div>
-          <form action={logout} className="sidebar-logout-form">
-            <button type="submit" className="nav-item sidebar-logout">
-              <UserRound size={17} />
-              <span>Log out</span>
-            </button>
-          </form>
-          <div className="profile-row"><div className="profile-avatar">{userInitials}</div><div><strong>{userDisplayName || 'Account'}</strong><span>{userRole}</span></div><MoreHorizontal size={17} /></div>
+          <SidebarProfileMenu
+            displayName={userDisplayName || 'Account'}
+            role={userRole}
+            initials={userInitials}
+            onAccountSettings={() => navigateToSettings('Profile')}
+          />
         </div>
       </aside>
 

@@ -1,7 +1,12 @@
 import { importPeopleRecordsForCurrentOrg } from '@/lib/groups-db'
 import type { ImportPeopleRecord } from '@/lib/griffineye-people-import'
-import { recordAuditEvents } from '@/lib/griffineye-audit'
-import { GROUP_IMPORT_SLUGS, isGroupImportSlug, isImportPeopleRecord, MAX_GROUP_IMPORT_ROWS } from '@/lib/group-import'
+import { recordAuditEventsWithRetry } from '@/lib/griffineye-audit'
+import {
+  GROUP_IMPORT_SLUGS,
+  isGroupImportSlug,
+  MAX_GROUP_IMPORT_ROWS,
+  validateImportPeopleRecords,
+} from '@/lib/group-import'
 import { requireUserProfile } from '@/lib/supabase/session'
 
 export const runtime = 'nodejs'
@@ -25,23 +30,33 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const { supabase, profile } = await requireUserProfile()
-    const body = (await request.json()) as { records?: unknown }
-    const records = Array.isArray(body.records) ? body.records.filter(isImportPeopleRecord) : []
+    const parsed: unknown = await request.json()
+    const recordsPayload =
+      parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && 'records' in parsed
+        ? (parsed as { records: unknown }).records
+        : undefined
+    const validation = validateImportPeopleRecords(recordsPayload)
 
-    if (records.length === 0) {
-      return Response.json({ error: 'No valid people records to import.' }, { status: 400 })
+    if (!validation.ok) {
+      return Response.json(
+        { error: 'Import validation failed.', validationErrors: validation.errors },
+        { status: 400 },
+      )
     }
+
+    const records = validation.records
 
     if (records.length > MAX_GROUP_IMPORT_ROWS) {
       return Response.json({ error: `Import batches are limited to ${MAX_GROUP_IMPORT_ROWS.toLocaleString()} records.` }, { status: 400 })
     }
 
-    const { records: inserted } = await importPeopleRecordsForCurrentOrg(records as ImportPeopleRecord[])
+    const { records: inserted } = await importPeopleRecordsForCurrentOrg(records)
 
     const actorLabel = profile.full_name || profile.email
     const personLabel = inserted.length === 1 ? 'person' : 'people'
 
-    await recordAuditEvents(supabase, profile.organization_id, [
+    try {
+      await recordAuditEventsWithRetry(supabase, profile.organization_id, [
       {
         category: 'import',
         action: 'Imported spreadsheet',
@@ -75,6 +90,9 @@ export async function POST(request: Request, context: RouteContext) {
         }
       }),
     ])
+    } catch (auditError) {
+      console.error('[groups/import] Records imported but audit logging failed', auditError)
+    }
 
     return Response.json({
       imported: inserted.length,

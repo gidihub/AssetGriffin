@@ -28,6 +28,7 @@ to authenticated
 with check (
   bucket_id = 'org-branding'
   and (storage.foldername(name))[1] = public.current_user_organization_id()::text
+  and public.current_user_is_org_admin()
 );
 
 drop policy if exists "org_branding_update_org" on storage.objects;
@@ -38,6 +39,7 @@ to authenticated
 using (
   bucket_id = 'org-branding'
   and (storage.foldername(name))[1] = public.current_user_organization_id()::text
+  and public.current_user_is_org_admin()
 );
 
 drop policy if exists "org_branding_delete_org" on storage.objects;
@@ -48,4 +50,5 @@ to authenticated
 using (
   bucket_id = 'org-branding'
   and (storage.foldername(name))[1] = public.current_user_organization_id()::text
+  and public.current_user_is_org_admin()
 );

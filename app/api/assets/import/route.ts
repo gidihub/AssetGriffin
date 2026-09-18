@@ -1,26 +1,73 @@
 import { importAssetsWithPhotosForCurrentOrg } from '@/lib/assets-db'
 import type { ImportAssetRecord } from '@/lib/griffineye-import'
-import { recordAuditEvents } from '@/lib/griffineye-audit'
+import { recordAuditEventsWithRetry } from '@/lib/griffineye-audit'
 import { requireUserProfile } from '@/lib/supabase/session'
 
 export const runtime = 'nodejs'
 
+type ImportValidationError = { index: number; reason: string }
+
 function isImportRecord(value: unknown): value is ImportAssetRecord {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
-  return typeof record.asset_tag === 'string' && typeof record.name === 'string'
+  if (typeof record.asset_tag !== 'string' || typeof record.name !== 'string') return false
+  if (
+    record.photo_url !== undefined &&
+    record.photo_url !== null &&
+    typeof record.photo_url !== 'string'
+  ) {
+    return false
+  }
+  return true
+}
+
+function validateImportAssetRecords(
+  rows: unknown,
+): { ok: true; records: ImportAssetRecord[] } | { ok: false; errors: ImportValidationError[] } {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { ok: false, errors: [{ index: -1, reason: 'No records provided.' }] }
+  }
+
+  const errors: ImportValidationError[] = []
+  const records: ImportAssetRecord[] = []
+
+  rows.forEach((row, index) => {
+    if (!isImportRecord(row)) {
+      errors.push({
+        index,
+        reason: 'Each row must include asset_tag and name; photo_url must be a string when provided.',
+      })
+      return
+    }
+    records.push(row)
+  })
+
+  if (errors.length > 0) {
+    return { ok: false, errors }
+  }
+
+  return { ok: true, records }
 }
 
 export async function POST(request: Request) {
   try {
     const { supabase, profile } = await requireUserProfile()
 
-    const body = (await request.json()) as { records?: unknown }
-    const records = Array.isArray(body.records) ? body.records.filter(isImportRecord) : []
+    const parsed: unknown = await request.json()
+    const recordsPayload =
+      parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && 'records' in parsed
+        ? (parsed as { records: unknown }).records
+        : undefined
+    const validation = validateImportAssetRecords(recordsPayload)
 
-    if (records.length === 0) {
-      return Response.json({ error: 'No valid asset records to import.' }, { status: 400 })
+    if (!validation.ok) {
+      return Response.json(
+        { error: 'Import validation failed.', validationErrors: validation.errors },
+        { status: 400 },
+      )
     }
+
+    const records = validation.records
 
     if (records.length > 2000) {
       return Response.json({ error: 'Import batches are limited to 2,000 records.' }, { status: 400 })
@@ -37,7 +84,8 @@ export async function POST(request: Request) {
         ? ` Attached ${photos.attached} photo${photos.attached === 1 ? '' : 's'}.`
         : ''
 
-    await recordAuditEvents(supabase, profile.organization_id, [
+    try {
+      await recordAuditEventsWithRetry(supabase, profile.organization_id, [
       {
         category: 'import',
         action: 'Imported spreadsheet',
@@ -66,6 +114,9 @@ export async function POST(request: Request) {
         metadata: { category: asset.category, location: asset.location },
       })),
     ])
+    } catch (auditError) {
+      console.error('[assets/import] Records imported but audit logging failed', auditError)
+    }
 
     return Response.json({
       imported: inserted.length,

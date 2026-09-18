@@ -346,7 +346,7 @@ export function GriffinEyeIntakeModal({
       setStage('upload')
       setError(err instanceof Error ? err.message : failureMessage)
     }
-  }, [usage?.cap])
+  }, [usage?.cap, usage?.tier, usage?.abuseCeiling])
 
   const processPhotos = useCallback(
     async (attached: AttachedPhoto[]) => {

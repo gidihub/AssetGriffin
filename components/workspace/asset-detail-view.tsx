@@ -674,7 +674,11 @@ export function AssetDetailView({
                     type="button"
                     className="button secondary small"
                     disabled={savingDetails}
-                    onClick={() => setSpecReview(null)}
+                    onClick={() => {
+                      setReviewedSpecName(specReview.cleanName.trim() || specReview.originalName.trim())
+                      setSpecSuggested(new Set())
+                      setSpecReview(null)
+                    }}
                   >
                     Dismiss review
                   </button>

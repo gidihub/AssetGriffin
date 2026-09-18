@@ -1,4 +1,123 @@
--- Extend People & teams with HR directory fields and backfill existing orgs.
+-- Review fixes: field replacement by id, org branding admin policies, seed_group_fields auth,
+-- overage billing advisory locks, device-type category backfill fallback.
+
+-- ---------------------------------------------------------------------------
+-- replace_group_fields_atomic: delete by incoming field IDs (not keys)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.replace_group_fields_atomic(
+  p_group_id uuid,
+  p_fields jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_org_id uuid;
+  v_field jsonb;
+  v_incoming_ids uuid[] := array[]::uuid[];
+begin
+  v_org_id := public.current_user_organization_id();
+  if v_org_id is null then
+    raise exception 'Unauthorized organization';
+  end if;
+
+  if not exists (
+    select 1
+    from public.groups g
+    where g.id = p_group_id
+      and g.organization_id = v_org_id
+  ) then
+    raise exception 'Group not found';
+  end if;
+
+  select coalesce(array_agg((f->>'id')::uuid), array[]::uuid[])
+  into v_incoming_ids
+  from jsonb_array_elements(coalesce(p_fields, '[]'::jsonb)) f
+  where nullif(f->>'id', '') is not null;
+
+  delete from public.fields
+  where group_id = p_group_id
+    and (
+      cardinality(v_incoming_ids) = 0
+      or id <> all(v_incoming_ids)
+    );
+
+  for v_field in select * from jsonb_array_elements(coalesce(p_fields, '[]'::jsonb))
+  loop
+    if nullif(v_field->>'id', '') is not null then
+      update public.fields
+      set
+        key = v_field->>'key',
+        label = v_field->>'label',
+        type = v_field->>'type',
+        options = coalesce(v_field->'options', '{}'::jsonb),
+        sort_order = (v_field->>'sort_order')::int,
+        required = coalesce((v_field->>'required')::boolean, false)
+      where id = (v_field->>'id')::uuid
+        and group_id = p_group_id;
+
+      if not found then
+        raise exception 'Field "%" was not found in this group.', v_field->>'key';
+      end if;
+    else
+      insert into public.fields (group_id, key, label, type, options, sort_order, required)
+      values (
+        p_group_id,
+        v_field->>'key',
+        v_field->>'label',
+        v_field->>'type',
+        coalesce(v_field->'options', '{}'::jsonb),
+        (v_field->>'sort_order')::int,
+        coalesce((v_field->>'required')::boolean, false)
+      );
+    end if;
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Org branding storage: admin-only mutations
+-- ---------------------------------------------------------------------------
+
+drop policy if exists "org_branding_insert_org" on storage.objects;
+create policy "org_branding_insert_org"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'org-branding'
+  and (storage.foldername(name))[1] = public.current_user_organization_id()::text
+  and public.current_user_is_org_admin()
+);
+
+drop policy if exists "org_branding_update_org" on storage.objects;
+create policy "org_branding_update_org"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'org-branding'
+  and (storage.foldername(name))[1] = public.current_user_organization_id()::text
+  and public.current_user_is_org_admin()
+);
+
+drop policy if exists "org_branding_delete_org" on storage.objects;
+create policy "org_branding_delete_org"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'org-branding'
+  and (storage.foldername(name))[1] = public.current_user_organization_id()::text
+  and public.current_user_is_org_admin()
+);
+
+-- ---------------------------------------------------------------------------
+-- seed_group_fields: org auth + assets branch
+-- ---------------------------------------------------------------------------
 
 create or replace function public.seed_group_fields(p_group_id uuid, p_slug text)
 returns void
@@ -96,14 +215,9 @@ begin
 end;
 $$;
 
--- Backfill people fields for every existing People & teams group.
-do $$
-declare
-  group_row record;
-begin
-  for group_row in
-    select id from public.groups where slug = 'people'
-  loop
-    perform public.seed_group_fields(group_row.id, 'people');
-  end loop;
-end $$;
+revoke all on function public.seed_group_fields(uuid, text) from public;
+grant execute on function public.seed_group_fields(uuid, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Serialize GriffinEye overage invoice work per organization (see 20260918130000)
+-- ---------------------------------------------------------------------------

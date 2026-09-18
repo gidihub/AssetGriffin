@@ -4,15 +4,27 @@ set options = jsonb_set(
   coalesce(f.options, '{}'::jsonb),
   '{choices}',
   (
-    select coalesce(jsonb_agg(to_jsonb(elem) order by elem), '[]'::jsonb)
-    from (
-      select distinct elem
-      from (
-        select jsonb_array_elements_text(coalesce(f.options->'choices', '[]'::jsonb)) as elem
-        union all
-        select unnest(array['MSI', 'Acer']::text[])
-      ) combined
-    ) distinct_elems
+    case
+      when jsonb_typeof(coalesce(f.options->'choices', '[]'::jsonb)) = 'array'
+        then coalesce(f.options->'choices', '[]'::jsonb)
+      else '[]'::jsonb
+    end
+    || case
+      when jsonb_typeof(coalesce(f.options->'choices', '[]'::jsonb)) = 'array'
+        and not coalesce(f.options->'choices', '[]'::jsonb) @> '["MSI"]'::jsonb
+        then '["MSI"]'::jsonb
+      when jsonb_typeof(coalesce(f.options->'choices', '[]'::jsonb)) <> 'array'
+        then '["MSI"]'::jsonb
+      else '[]'::jsonb
+    end
+    || case
+      when jsonb_typeof(coalesce(f.options->'choices', '[]'::jsonb)) = 'array'
+        and not coalesce(f.options->'choices', '[]'::jsonb) @> '["Acer"]'::jsonb
+        then '["Acer"]'::jsonb
+      when jsonb_typeof(coalesce(f.options->'choices', '[]'::jsonb)) <> 'array'
+        then '["Acer"]'::jsonb
+      else '[]'::jsonb
+    end
   ),
   true
 )

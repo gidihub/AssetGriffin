@@ -412,8 +412,8 @@ function PeopleRecordPreview({ records, total }: { records: ImportPeopleRecord[]
           </tr>
         </thead>
         <tbody>
-          {records.map((record) => (
-            <tr key={`${record.employee_id || record.email || record.name}`}>
+          {records.map((record, index) => (
+            <tr key={`${index}-${record.employee_id || record.email || record.name}`}>
               <td>{record.name}</td>
               <td>{record.email || '—'}</td>
               <td>{record.title || record.role || '—'}</td>

@@ -106,7 +106,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
       return Response.json({ error: 'Record not found.' }, { status: 404 })
     }
 
-    const data = applySpecBackfillReview(
+    const sanitized = applySpecBackfillReview(
       {
         currentData: (record.data ?? {}) as Record<string, unknown>,
         review: body.review,
@@ -114,7 +114,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
       fields,
     )
 
-    const updated = await updateRecordForGroup(group.id, body.recordId, data)
+    const updated = await updateRecordForGroup(group.id, body.recordId, sanitized.data)
     return Response.json({ record: updated })
   } catch (error) {
     console.error('[spec-backfill POST]', error)

@@ -235,7 +235,8 @@ async function collectRecordPhotoEntries(records: WorkspaceRecordRow[]): Promise
     const photos = parseAssetPhotos(record.data)
     if (!photos.length) continue
 
-    const folder = sanitizePathSegment(String(record.data.asset_tag ?? record.data.name ?? record.id))
+    const folderLabel = sanitizePathSegment(String(record.data.asset_tag ?? record.data.name ?? 'asset'))
+    const folder = `${folderLabel}-${sanitizePathSegment(record.id)}`
 
     for (const [index, photo] of photos.entries()) {
       const blob = photo.storagePath
@@ -247,7 +248,7 @@ async function collectRecordPhotoEntries(records: WorkspaceRecordRow[]): Promise
       const baseName = sanitizePathSegment(photo.name || `photo-${index + 1}`)
       const ext = photoExtension(photo.storagePath, photo.previewUrl, blob)
       const normalizedName = baseName.toLowerCase().endsWith(ext) ? baseName : `${baseName}${ext}`
-      entries.push({ path: `files/${folder}/${normalizedName}`, blob })
+      entries.push({ path: `files/${folder}/${index + 1}-${normalizedName}`, blob })
     }
   }
 

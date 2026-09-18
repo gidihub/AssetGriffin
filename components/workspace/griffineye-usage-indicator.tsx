@@ -80,7 +80,9 @@ export function GriffinEyeUsageIndicator({
         {usage.tier === 'enterprise'
           ? usage.remaining > 0
             ? `${usage.remaining.toLocaleString()} included scan${usage.remaining === 1 ? '' : 's'} remaining · unlimited plan · resets monthly`
-            : `Included allowance used · additional scans are $${GRIFFIN_SCAN_OVERAGE_RATE_USD.toFixed(2)} each`
+            : usage.allowsOverage
+              ? `Included allowance used · additional scans are $${GRIFFIN_SCAN_OVERAGE_RATE_USD.toFixed(2)} each · unlimited plan`
+              : 'Included allowance used · unlimited plan'
           : usage.remaining > 0
             ? `${usage.remaining.toLocaleString()} included scan${usage.remaining === 1 ? '' : 's'} remaining · resets monthly`
             : usage.allowsOverage

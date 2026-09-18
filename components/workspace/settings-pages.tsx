@@ -999,7 +999,7 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
         title="Export activity log"
         summary={
           <>
-            Export <strong>{filtered.length}</strong>{' '}
+            Export up to <strong>5,000</strong> matching{' '}
             {filtered.length === 1 ? 'event' : 'events'}
             {tab !== 'all' ? (
               <>

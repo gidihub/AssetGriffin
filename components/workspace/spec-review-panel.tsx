@@ -9,6 +9,14 @@ import {
 } from '@/lib/asset-spec-fields'
 import type { SpecReviewFields } from '@/lib/asset-spec-review'
 
+function selectChoices(currentValue: string, choices: readonly string[]): string[] {
+  const trimmed = currentValue.trim()
+  if (trimmed && !choices.includes(trimmed)) {
+    return [trimmed, ...choices]
+  }
+  return [...choices]
+}
+
 function FieldLabel({ label, suggested }: { label: string; suggested?: boolean }) {
   return (
     <span className="extracted-field-label">
@@ -49,7 +57,7 @@ export function SpecReviewPanel({
           <FieldLabel label="Brand" suggested={suggestedFields.has('brand')} />
           <select value={review.brand} onChange={(event) => patch({ brand: event.target.value })}>
             <option value="">Select…</option>
-            {BRAND_CHOICES.map((choice) => (
+            {selectChoices(review.brand, BRAND_CHOICES).map((choice) => (
               <option key={choice} value={choice}>
                 {choice}
               </option>
@@ -60,7 +68,7 @@ export function SpecReviewPanel({
           <FieldLabel label="Device type" suggested={suggestedFields.has('device_type')} />
           <select value={review.device_type} onChange={(event) => patch({ device_type: event.target.value })}>
             <option value="">Select…</option>
-            {DEVICE_TYPE_CHOICES.map((choice) => (
+            {selectChoices(review.device_type, DEVICE_TYPE_CHOICES).map((choice) => (
               <option key={choice} value={choice}>
                 {choice}
               </option>
@@ -78,7 +86,7 @@ export function SpecReviewPanel({
             onChange={(event) => patch({ operating_system: event.target.value })}
           >
             <option value="">Select…</option>
-            {OPERATING_SYSTEM_CHOICES.map((choice) => (
+            {selectChoices(review.operating_system, OPERATING_SYSTEM_CHOICES).map((choice) => (
               <option key={choice} value={choice}>
                 {choice}
               </option>
@@ -93,7 +101,7 @@ export function SpecReviewPanel({
           <FieldLabel label="RAM" suggested={suggestedFields.has('ram')} />
           <select value={review.ram} onChange={(event) => patch({ ram: event.target.value })}>
             <option value="">Select…</option>
-            {RAM_CHOICES.map((choice) => (
+            {selectChoices(review.ram, RAM_CHOICES).map((choice) => (
               <option key={choice} value={choice}>
                 {choice}
               </option>

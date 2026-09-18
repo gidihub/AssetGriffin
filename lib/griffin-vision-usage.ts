@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createAdminClient } from '@/lib/supabase/admin'
 import {
   GRIFFIN_SCAN_OVERAGE_RATE_USD,
   getScanAbuseCeilingForTier,
@@ -256,63 +255,25 @@ function isBillingSourceAmbiguityError(message: string): boolean {
   return message.includes('billing_source') && message.includes('ambiguous')
 }
 
-async function reserveVisionUsageFallback(
+async function queueOverageInvoiceOrThrow(
   supabase: SupabaseClient,
   organizationId: string,
-  usageType: GriffinEyeUsageType,
-): Promise<VisionUsageReservation> {
-  const tier = await getOrganizationTier(supabase, organizationId)
-  const cap = getScanAllowanceForTier(tier)
-  const abuseCeiling = getScanAbuseCeilingForTier(tier)
-  const tierUsed = await getMonthlyTierVisionUsage(supabase, organizationId)
-  const totalUsed = await getMonthlyTotalVisionUsage(supabase, organizationId)
-
-  if (totalUsed >= abuseCeiling && abuseCeiling > cap) {
-    const snapshot = await getVisionUsageSnapshot(supabase, organizationId, tier)
-    const capError = new Error(buildVisionCapMessage(snapshot))
-    ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'ABUSE_CAP_EXCEEDED'
-    ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).snapshot = snapshot
-    throw capError
-  }
-
-  let billingSource: VisionBillingSource
-  if (tier === 'free') {
-    if (tierUsed >= cap) {
-      const snapshot = await getVisionUsageSnapshot(supabase, organizationId, tier)
-      const capError = new Error(buildVisionCapMessage(snapshot))
-      ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'VISION_CAP_EXCEEDED'
-      ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).snapshot = snapshot
-      throw capError
+  usageLogId: string,
+): Promise<void> {
+  try {
+    const invoiceResult = await queueOverageScanInvoiceItem(supabase, organizationId)
+    if (invoiceResult.status === 'queued') {
+      console.error('[griffin-vision/overage-invoice]', invoiceResult.reason)
     }
-    billingSource = 'tier_allowance'
-  } else if (tierUsed < cap) {
-    billingSource = 'tier_allowance'
-  } else {
-    billingSource = 'overage'
+  } catch (invoiceError) {
+    console.error('[griffin-vision/overage-invoice]', invoiceError)
+    try {
+      await releaseVisionUsage(supabase, usageLogId)
+    } catch (releaseError) {
+      console.error('[griffin-vision/overage-invoice] failed to release usage after invoice error', releaseError)
+    }
+    throw invoiceError
   }
-
-  const admin = createAdminClient()
-  const { data: logRow, error: logError } = await admin
-    .from('ai_usage_log')
-    .insert({
-      organization_id: organizationId,
-      usage_type: usageType,
-      billing_source: billingSource,
-    })
-    .select('id')
-    .single()
-
-  if (logError || !logRow?.id) {
-    throw new Error(logError?.message ?? 'Could not reserve GriffinEye usage.')
-  }
-
-  if (billingSource === 'overage') {
-    queueOverageScanInvoiceItem(supabase, organizationId).catch((invoiceError) => {
-      console.error('[griffin-vision/overage-invoice]', invoiceError)
-    })
-  }
-
-  return { usageLogId: logRow.id, billingSource }
 }
 
 export async function reserveVisionUsage(
@@ -341,7 +302,7 @@ export async function reserveVisionUsage(
       throw capError
     }
     if (isBillingSourceAmbiguityError(error.message)) {
-      return reserveVisionUsageFallback(supabase, organizationId, usageType)
+      throw new Error('GriffinEye usage reservation is temporarily unavailable. Try again shortly.')
     }
     throw new Error(error.message)
   }
@@ -352,15 +313,14 @@ export async function reserveVisionUsage(
   }
 
   const billingSource = row.billing_source as VisionBillingSource
+  const usageLogId = row.usage_log_id as string
 
   if (billingSource === 'overage') {
-    queueOverageScanInvoiceItem(supabase, organizationId).catch((invoiceError) => {
-      console.error('[griffin-vision/overage-invoice]', invoiceError)
-    })
+    await queueOverageInvoiceOrThrow(supabase, organizationId, usageLogId)
   }
 
   return {
-    usageLogId: row.usage_log_id as string,
+    usageLogId,
     billingSource,
   }
 }

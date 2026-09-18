@@ -55,7 +55,7 @@ export async function importAssetsWithPhotosForCurrentOrg(
   const photoItems = inserted
     .map((record, index) => ({
       recordId: record.id,
-      photoUrl: records[index]?.photo_url?.trim() ?? '',
+      photoUrl: typeof records[index]?.photo_url === 'string' ? records[index].photo_url.trim() : '',
       assetTag: String(records[index]?.asset_tag ?? record.id),
     }))
     .filter((item) => item.photoUrl)

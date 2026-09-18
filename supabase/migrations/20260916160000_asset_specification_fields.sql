@@ -193,7 +193,7 @@ set data = jsonb_set(
       when lower(coalesce(r.data->>'device_type', '')) like '%monitor%' then 'Displays'
       when lower(coalesce(r.data->>'device_type', '')) like '%laptop%'
         or lower(coalesce(r.data->>'device_type', '')) like '%desktop%' then 'Computers'
-      else 'Computers'
+      else 'Equipment'
     end
   ),
   true

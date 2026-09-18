@@ -352,7 +352,7 @@ export const compareTargets: ComparePage[] = [
     looksElsewhereBody:
       'Self-hosting means your organization is responsible for installing, updating, backing up, securing, and maintaining the software yourself — a genuine technical and operational commitment, not a "set it and forget it" tool. This is fundamentally different from a hosted SaaS product where that responsibility isn\u2019t yours at all.',
     unverifiedBody:
-      'Specific scanning method (phone camera vs. hardware), maintenance scheduling, inspection checklists, custom fields, third-party integrations, or any AI capability — none of these could be confirmed from primary Snipe-IT sources at time of research.',
+      'Maintenance scheduling, inspection checklists, or any AI capability — none of these could be confirmed from primary Snipe-IT sources at time of research.',
     lastVerified: COMPARE_LAST_VERIFIED,
     finalCtaLabel: 'Start free — no server to set up, no updates to manage yourself',
     faqs: [],

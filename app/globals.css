@@ -400,7 +400,17 @@ button { cursor: pointer; }
 .admin-group{margin-top:8px;padding-top:12px;border-top:1px solid var(--sidebar-border)}
 .admin-group .nav-item{padding-left:12px;padding-right:12px}
 .sidebar-bottom .upgrade-card{margin-left:0;margin-right:0}
-.sidebar-bottom .profile-row{padding-left:10px;padding-right:6px}
+.sidebar-profile-menu{position:relative}
+.sidebar-profile-popover{position:absolute;bottom:calc(100% + 8px);left:0;right:0;z-index:30;padding:6px;border:1px solid var(--sidebar-border);border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12)}
+.sidebar-profile-popover-label{margin:0;padding:6px 10px 4px;color:#9CA3AF;font-size:9px;font-weight:500;letter-spacing:.04em;text-transform:capitalize}
+.sidebar-profile-popover-item{width:100%;display:flex;align-items:center;gap:8px;border:0;border-radius:7px;background:transparent;padding:9px 10px;text-align:left;font-size:12px;font-weight:500;color:var(--sidebar-fg-active);transition:background .15s ease,color .15s ease}
+.sidebar-profile-popover-item:hover{background:var(--sidebar-hover-bg)}
+.sidebar-profile-sign-out{color:#B23B3B}
+.sidebar-profile-sign-out:hover{background:#FBE7E7;color:#9B2F2F}
+.sidebar-bottom .profile-row{width:100%;margin:0;border:0;background:transparent;padding:10px 6px 0;text-align:left;cursor:pointer;border-radius:8px;transition:background .15s ease}
+.sidebar-bottom .profile-row:hover{background:var(--sidebar-hover-bg)}
+.profile-chevron{margin-left:auto;color:#9CA3AF;flex-shrink:0;transition:transform .18s ease}
+.profile-chevron.is-open{transform:rotate(180deg)}
 @media (max-width:900px){.settings-shell{flex-direction:column;overflow-y:auto}.settings-subnav{width:100%;flex:0 0 auto;min-width:0;padding:20px 0 12px;border-right:0;border-bottom:1px solid #E3E1DA}.settings-subnav-profile{padding:0 16px 14px}.settings-subnav-group{padding:0 8px}.settings-subnav-items{flex-direction:row;flex-wrap:wrap;gap:6px}.settings-subnav-item{width:auto;padding:7px 12px;font-size:11px;white-space:nowrap}.settings-subnav-item.is-active{box-shadow:none;border:1px solid #BFE8E0}.settings-main{padding:24px 20px 40px}}
 .settings-stack{display:flex;flex-direction:column;gap:18px}
 .settings-card-body{padding:20px 22px 22px}

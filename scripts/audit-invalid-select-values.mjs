@@ -4,6 +4,7 @@
  * Usage: node --env-file=.env.local scripts/audit-invalid-select-values.mjs
  */
 import { createClient } from '@supabase/supabase-js'
+import { fetchAllPages } from './lib/paginate-supabase.mjs'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -26,18 +27,16 @@ if (groupsError) throw new Error(groupsError.message)
 const invalidRows = []
 
 for (const group of groups ?? []) {
-  const { data: fields, error: fieldsError } = await supabase.from('fields').select('*').eq('group_id', group.id)
-  if (fieldsError) throw new Error(fieldsError.message)
+  const fields = await fetchAllPages((from, to) =>
+    supabase.from('fields').select('*').eq('group_id', group.id).range(from, to),
+  )
 
-  const constrained = (fields ?? []).filter((field) => field.type === 'select' || field.type === 'status')
-  const { data: records, error: recordsError } = await supabase
-    .from('records')
-    .select('id, data, organization_id')
-    .eq('group_id', group.id)
+  const constrained = fields.filter((field) => field.type === 'select' || field.type === 'status')
+  const records = await fetchAllPages((from, to) =>
+    supabase.from('records').select('id, data, organization_id').eq('group_id', group.id).range(from, to),
+  )
 
-  if (recordsError) throw new Error(recordsError.message)
-
-  for (const record of records ?? []) {
+  for (const record of records) {
     const data = record.data ?? {}
     for (const field of constrained) {
       const raw = data[field.key]
@@ -60,16 +59,5 @@ for (const group of groups ?? []) {
   }
 }
 
-if (!invalidRows.length) {
-  console.log('No invalid select/status values found across asset records.')
-  process.exit(0)
-}
-
-console.log(`Found ${invalidRows.length} invalid select/status value(s):\n`)
-for (const row of invalidRows) {
-  console.log(
-    `- record ${row.recordId} (${row.assetTag || row.name || 'untitled'}) · ${row.fieldLabel} (${row.fieldKey}) = "${row.invalidValue}" · allowed: ${row.allowedChoices.join(', ')}`,
-  )
-}
-
-process.exit(0)
+console.log(JSON.stringify({ invalidCount: invalidRows.length, invalidRows }, null, 2))
+process.exitCode = invalidRows.length > 0 ? 1 : 0

@@ -1,7 +1,7 @@
 import { ASSET_SPEC_FIELD_KEYS } from '@/lib/asset-spec-fields'
 import { applySpecFieldsToRecordData, isSpecDumpName, parseSpecDump } from '@/lib/asset-spec-normalization'
 import { mergeSpecReviewIntoRecordData, specReviewFromParsed, type SpecReviewFields } from '@/lib/asset-spec-review'
-import { sanitizeRecordData } from '@/lib/field-value-validation'
+import { sanitizeRecordData, type SanitizeRecordDataResult } from '@/lib/field-value-validation'
 import type { DbField, DbRecord } from '@/lib/supabase/database.types'
 
 export type SpecBackfillProposal = {
@@ -60,9 +60,9 @@ export function buildSpecBackfillProposal(
 export function applySpecBackfillReview(
   proposal: Pick<SpecBackfillProposal, 'currentData' | 'review'>,
   fields: DbField[],
-): Record<string, unknown> {
+): SanitizeRecordDataResult {
   const merged = mergeSpecReviewIntoRecordData(proposal.currentData, proposal.review)
-  return sanitizeRecordData(merged, fields).data
+  return sanitizeRecordData(merged, fields)
 }
 
 export function buildSpecBackfillProposals(

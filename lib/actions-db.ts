@@ -139,16 +139,16 @@ function applyActionToRecordData(
     const requiredFailed = config.checklist_items.some(
       (item) => item.required && !values[item.id],
     )
-    if (actionType.change_field) {
-      if (!requiredFailed && config.pass_status) {
-        next[actionType.change_field] = config.pass_status
-        const today = new Date().toISOString().slice(0, 10)
-        if ('last_completed' in next) {
-          next.last_completed = today
-        }
-      } else if (requiredFailed && config.fail_status) {
-        next[actionType.change_field] = config.fail_status
+    if (!requiredFailed && config.pass_status) {
+      const today = new Date().toISOString().slice(0, 10)
+      if ('last_completed' in next) {
+        next.last_completed = today
       }
+      if (actionType.change_field) {
+        next[actionType.change_field] = config.pass_status
+      }
+    } else if (requiredFailed && config.fail_status && actionType.change_field) {
+      next[actionType.change_field] = config.fail_status
     }
   } else if (config.due_date_field && values[config.due_date_field]) {
     next[config.due_date_field] = values[config.due_date_field]

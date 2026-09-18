@@ -16,6 +16,8 @@ export const AUDIT_CATEGORY_LABELS: Record<AuditCategory, string> = {
 }
 
 export type AuditLogEntry = {
+  /** Stable id assigned before insert — preserved across retry attempts. */
+  id?: string
   category: AuditCategory
   action: string
   source?: AuditSource
@@ -46,6 +48,7 @@ export type DbAuditLogRow = {
 
 function toAuditRow(organizationId: string, entry: AuditLogEntry) {
   return {
+    ...(entry.id ? { id: entry.id } : {}),
     organization_id: organizationId,
     category: entry.category,
     action: entry.action,
@@ -87,11 +90,41 @@ export async function recordAuditEvents(
 ): Promise<void> {
   if (!entries.length) return
 
-  const { error } = await supabase
-    .from('audit_log')
-    .insert(entries.map((entry) => toAuditRow(organizationId, entry)))
+  const { error } = await supabase.from('audit_log').upsert(
+    entries.map((entry) => toAuditRow(organizationId, entry)),
+    { onConflict: 'id', ignoreDuplicates: true },
+  )
 
   if (error) {
     console.error(`[audit-log] failed to record ${entries.length} events`, error.message)
+    throw new Error(error.message)
   }
+}
+
+/** Retries audit inserts so a committed import is not reported as failed. */
+export async function recordAuditEventsWithRetry(
+  supabase: SupabaseClient,
+  organizationId: string,
+  entries: AuditLogEntry[],
+  maxAttempts = 3,
+): Promise<void> {
+  const entriesWithIds = entries.map((entry) => ({
+    ...entry,
+    id: entry.id ?? crypto.randomUUID(),
+  }))
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await recordAuditEvents(supabase, organizationId, entriesWithIds)
+      return
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Audit logging failed.')
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 100))
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Audit logging failed.')
 }

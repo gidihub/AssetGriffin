@@ -222,7 +222,7 @@ as $$
 declare
   v_org_id uuid;
   v_field jsonb;
-  v_incoming_keys text[] := array[]::text[];
+  v_incoming_ids uuid[] := array[]::uuid[];
 begin
   v_org_id := public.current_user_organization_id();
   if v_org_id is null then
@@ -238,15 +238,16 @@ begin
     raise exception 'Group not found';
   end if;
 
-  select coalesce(array_agg(f->>'key'), array[]::text[])
-  into v_incoming_keys
-  from jsonb_array_elements(coalesce(p_fields, '[]'::jsonb)) f;
+  select coalesce(array_agg((f->>'id')::uuid), array[]::uuid[])
+  into v_incoming_ids
+  from jsonb_array_elements(coalesce(p_fields, '[]'::jsonb)) f
+  where nullif(f->>'id', '') is not null;
 
   delete from public.fields
   where group_id = p_group_id
     and (
-      cardinality(v_incoming_keys) = 0
-      or key <> all(v_incoming_keys)
+      cardinality(v_incoming_ids) = 0
+      or id <> all(v_incoming_ids)
     );
 
   for v_field in select * from jsonb_array_elements(coalesce(p_fields, '[]'::jsonb))
