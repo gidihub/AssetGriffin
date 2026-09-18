@@ -31,11 +31,13 @@ export async function POST(request: Request) {
     console.error('[onboarding/apply-template]', error)
     const message = error instanceof Error ? error.message : 'Could not apply template.'
     const status =
-      message === 'Unauthorized' || message === 'Forbidden'
+      message === 'Unauthorized'
         ? 401
-        : message.includes('duplicate') || message.includes('unique')
-          ? 409
-          : 500
+        : message === 'Forbidden'
+          ? 403
+          : message.includes('duplicate') || message.includes('unique')
+            ? 409
+            : 500
     return Response.json({ error: message }, { status })
   }
 }

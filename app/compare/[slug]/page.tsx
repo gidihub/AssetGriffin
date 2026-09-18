@@ -30,13 +30,18 @@ export default async function ComparePage({ params }: PageProps) {
       <MarketingHeader />
       <CompareTemplate
         competitorName={target.competitorName}
+        comparisonCompetitorLabel={target.comparisonCompetitorLabel}
+        extraColumnHeader={target.extraColumnHeader}
         intro={target.intro}
         rows={target.rows}
         doesWellHeadline={target.doesWellHeadline}
         doesWellBody={target.doesWellBody}
         looksElsewhereHeadline={target.looksElsewhereHeadline}
         looksElsewhereBody={target.looksElsewhereBody}
+        unverifiedBody={target.unverifiedBody}
         pricingCallout={target.pricingCallout}
+        lastVerified={target.lastVerified}
+        finalCtaLabel={target.finalCtaLabel}
         isPlaceholder={target.isPlaceholder}
         faqs={target.faqs}
       />

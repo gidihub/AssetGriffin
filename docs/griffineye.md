@@ -37,9 +37,11 @@ the dashboard never spends the org's AI allowance.
 
 Every action that calls OpenAI — photo scans, questions, and text extraction —
 bills against one monthly allowance per organization, sized by subscription tier
-(`lib/griffin-vision-usage.ts`). Credit is reserved before the model call and
-released if the call fails, so a failed action never costs an allowance slot.
-Purchased credits are consumed once the tier allowance is exhausted.
+(`lib/griffin-scan-allowances.ts`, enforced in `lib/griffin-vision-usage.ts`).
+Usage is reserved before the model call and released if the call fails, so a
+failed action never costs an allowance slot. Free tier hard-blocks at 50 scans/month.
+Paid tiers continue at $0.02/scan overage (queued on the next Stripe invoice) up
+to a tier abuse ceiling.
 
 ## Audit trail
 
@@ -65,7 +67,7 @@ rather than failing the user's action.
 
 Each capability has a script under `scripts/` that exercises the real HTTP
 routes as a signed-in user; see `supabase/README.md` for how to run them. They
-consume AI credits.
+consume GriffinEye scans from the monthly allowance.
 
 ## Deferred — not built, tracked here as backlog
 

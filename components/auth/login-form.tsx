@@ -65,6 +65,7 @@ export function LoginForm({ redirect, error, message, initialMode = 'signin' }: 
               autoComplete={isSignup ? 'new-password' : 'current-password'}
               placeholder={isSignup ? 'Min. 6 characters' : '••••••••'}
               minLength={6}
+              required
               className="auth-input auth-input-password"
             />
             <button

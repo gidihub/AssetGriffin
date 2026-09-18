@@ -37,6 +37,7 @@ type Turn =
       report: GriffinEyeReport | null
       trace: GriffinEyeTraceStep[]
       followUp: string | null
+      thinking?: boolean
     }
   | { role: 'error'; id: string; text: string; atCap: boolean }
 
@@ -180,6 +181,7 @@ export function GriffinEyeAssistant({
   const [turns, setTurns] = useState<Turn[]>([])
   const [value, setValue] = useState('')
   const [pending, setPending] = useState(false)
+  const [revealedAnswerIds, setRevealedAnswerIds] = useState<Set<string>>(() => new Set())
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -196,6 +198,12 @@ export function GriffinEyeAssistant({
   )
   const greeting = timeGreeting()
   const headline = contextHeadline(maintenanceCount, totalAssets, gapCount)
+  const latestGriffineyeTurnId = useMemo(() => {
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      if (turns[index]?.role === 'griffineye') return turns[index].id
+    }
+    return null
+  }, [turns])
   const contextLine =
     totalAssets > 0
       ? `Your workspace has ${totalAssets} assets · ${maintenanceCount} in maintenance`
@@ -259,28 +267,48 @@ export function GriffinEyeAssistant({
     if (!trimmed || pending) return
 
     const id = crypto.randomUUID()
-    setTurns((current) => [...current, { role: 'user', id, text: trimmed }])
+    const answerId = `${id}-answer`
+    setTurns((current) => [
+      ...current,
+      { role: 'user', id, text: trimmed },
+      {
+        role: 'griffineye',
+        id: answerId,
+        text: '',
+        table: null,
+        report: null,
+        trace: [],
+        followUp: null,
+        thinking: true,
+      },
+    ])
     setValue('')
     setPending(true)
 
     try {
       const result = await askGriffinEye(trimmed)
-      setTurns((current) => [
-        ...current,
-        {
-          role: 'griffineye',
-          id: `${id}-answer`,
-          text: result.answer,
-          table: result.table,
-          report: result.report,
-          trace: result.trace,
-          followUp: suggestFollowUp(trimmed, result.answer),
-        },
-      ])
+      setTurns((current) =>
+        current.map((turn) =>
+          turn.id === answerId && turn.role === 'griffineye'
+            ? {
+                ...turn,
+                text: result.answer,
+                table: result.table,
+                report: result.report,
+                trace: result.trace,
+                followUp: suggestFollowUp(trimmed, result.answer),
+                thinking: false,
+              }
+            : turn,
+        ),
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : 'GriffinEye could not answer that question.'
       const atCap = (error as { code?: string }).code === 'VISION_CAP_EXCEEDED'
-      setTurns((current) => [...current, { role: 'error', id: `${id}-error`, text: message, atCap }])
+      setTurns((current) => [
+        ...current.filter((turn) => turn.id !== answerId),
+        { role: 'error', id: `${id}-error`, text: message, atCap },
+      ])
     } finally {
       setPending(false)
     }
@@ -445,12 +473,16 @@ export function GriffinEyeAssistant({
                     <p>{turn.text}</p>
                     {turn.atCap && onOpenBilling && (
                       <button type="button" className="button secondary small" onClick={onOpenBilling}>
-                        View plan and credits
+                        View plan and billing
                       </button>
                     )}
                   </div>
                 )
               }
+
+              const isLatestGriffineyeTurn = turn.id === latestGriffineyeTurnId
+              const answerRevealed =
+                revealedAnswerIds.has(turn.id) || (!turn.thinking && turn.trace.length === 0)
 
               return (
                 <div key={turn.id} className="ge-chat-turn ge-chat-turn-assistant">
@@ -458,9 +490,23 @@ export function GriffinEyeAssistant({
                     <GriffinEyeIcon size={14} />
                   </span>
                   <div className="ge-chat-assistant-content">
-                    {turn.trace.length > 0 && (
-                      <GriffinEyeThinkingSteps steps={turn.trace} defaultExpanded />
+                    {(turn.thinking || turn.trace.length > 0) && (
+                      <GriffinEyeThinkingSteps
+                        steps={turn.trace}
+                        loading={Boolean(turn.thinking)}
+                        animate={isLatestGriffineyeTurn && !answerRevealed}
+                        defaultExpanded
+                        onRevealComplete={() => {
+                          setRevealedAnswerIds((current) => {
+                            if (current.has(turn.id)) return current
+                            const next = new Set(current)
+                            next.add(turn.id)
+                            return next
+                          })
+                        }}
+                      />
                     )}
+                    {!turn.thinking && turn.text && (!isLatestGriffineyeTurn || answerRevealed) && (
                     <div className="ge-chat-answer-bubble">
                       <p>{turn.text}</p>
                       {turn.table && <GriffinEyeResultTable table={turn.table} />}
@@ -482,7 +528,8 @@ export function GriffinEyeAssistant({
                         </button>
                       )}
                     </div>
-                    {turn.followUp && (
+                    )}
+                    {!turn.thinking && turn.followUp && (!isLatestGriffineyeTurn || answerRevealed) && (
                       <button
                         type="button"
                         className="ge-chat-follow-up"
@@ -496,17 +543,6 @@ export function GriffinEyeAssistant({
                 </div>
               )
             })}
-
-            {pending && (
-              <div className="ge-chat-turn ge-chat-turn-assistant">
-                <span className="ge-chat-assistant-avatar">
-                  <GriffinEyeIcon size={14} />
-                </span>
-                <div className="ge-chat-assistant-content">
-                  <GriffinEyeThinkingSteps steps={[]} loading defaultExpanded />
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -514,8 +550,8 @@ export function GriffinEyeAssistant({
       {inConversation && renderComposer('thread')}
 
       <p className="ge-chat-disclaimer">
-        GriffinEye can make mistakes. Verify important information before acting on answers. Each question uses one
-        GriffinEye AI credit.
+        GriffinEye can make mistakes. Verify important information before acting on answers. Each question counts as one
+        scan toward your monthly allowance.
       </p>
     </div>
   )

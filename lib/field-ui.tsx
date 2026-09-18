@@ -17,8 +17,19 @@ export function fieldChoices(field: DbField): string[] {
   return Array.isArray(choices) ? choices.filter((c): c is string => typeof c === 'string') : []
 }
 
+export function hasFieldValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  return true
+}
+
+/** Value alone, or em dash when empty — never prefixes a field label. */
+export function formatOptionalValue(value: unknown): string {
+  return hasFieldValue(value) ? String(value).trim() : '—'
+}
+
 export function formatFieldValue(field: DbField, value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—'
+  if (!hasFieldValue(value)) return '—'
   if (field.type === 'checkbox') return value ? 'Yes' : 'No'
   if (field.type === 'date' && typeof value === 'string') {
     const parsed = new Date(`${value}T00:00:00`)
@@ -55,6 +66,23 @@ export function recordDisplayLabel(
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
   return fallbackId.slice(0, 8)
+}
+
+export type AssetDetailMetaPart = { kind: 'tag' | 'serial' | 'category'; text: string }
+
+/** Inline metadata for asset headers (tag · serial · category). Omits serial when empty. */
+export function assetDetailMetaParts(data: Record<string, unknown>, recordId: string): AssetDetailMetaPart[] {
+  const parts: AssetDetailMetaPart[] = []
+  const tag = String(data.asset_tag ?? '').trim()
+  parts.push({ kind: 'tag', text: tag || recordId })
+
+  const serial = String(data.serial ?? '').trim()
+  if (serial) parts.push({ kind: 'serial', text: serial })
+
+  const category = String(data.category ?? '').trim()
+  parts.push({ kind: 'category', text: category || '—' })
+
+  return parts
 }
 
 export function recordDisplaySubtitle(fields: DbField[], data: Record<string, unknown>, id: string): string {

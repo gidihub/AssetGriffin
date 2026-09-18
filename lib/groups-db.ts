@@ -1,10 +1,13 @@
 import {
   dbRecordToAssetRecord,
   importRecordToAssetData,
+  importRecordToPeopleData,
   intakeDraftToRecordData,
 } from '@/lib/record-mappers'
 import type { AssetIntakeDraft } from '@/lib/griffineye-intake'
 import type { ImportAssetRecord } from '@/lib/griffineye-import'
+import type { ImportPeopleRecord } from '@/lib/griffineye-people-import'
+import { sanitizeRecordData } from '@/lib/field-value-validation'
 import { slugifyGroupName } from '@/lib/group-icons'
 import type { AssetStatus, DbAsset, LifecycleStage } from '@/lib/supabase/database.types'
 import type { DbField, DbGroup, DbRecord } from '@/lib/supabase/database.types'
@@ -53,6 +56,20 @@ export async function listRecordsForGroup(groupId: string) {
   return (data ?? []) as DbRecord[]
 }
 
+export async function getRecordForGroup(groupId: string, recordId: string) {
+  const { supabase, profile } = await requireUserProfile()
+  const { data, error } = await supabase
+    .from('records')
+    .select('*')
+    .eq('id', recordId)
+    .eq('group_id', groupId)
+    .eq('organization_id', profile.organization_id)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return (data as DbRecord | null) ?? null
+}
+
 export async function getAssetsGroupForCurrentOrg() {
   return getGroupBySlug('assets')
 }
@@ -61,6 +78,11 @@ async function requireAssetsGroup() {
   const group = await getAssetsGroupForCurrentOrg()
   if (!group) throw new Error('Assets group is not configured for this organization.')
   return group
+}
+
+async function sanitizeRecordDataForGroup(groupId: string, data: Record<string, unknown>) {
+  const fields = await listFieldsForGroup(groupId)
+  return sanitizeRecordData(data, fields).data
 }
 
 export async function listAssetRecordsForCurrentOrg() {
@@ -90,10 +112,11 @@ export async function updateRecordForGroup(
     ...((existing.data ?? {}) as Record<string, unknown>),
     ...data,
   }
+  const sanitizedData = await sanitizeRecordDataForGroup(groupId, mergedData)
 
   const { data: row, error } = await supabase
     .from('records')
-    .update({ data: mergedData })
+    .update({ data: sanitizedData })
     .eq('id', recordId)
     .eq('group_id', groupId)
     .eq('organization_id', profile.organization_id)
@@ -119,15 +142,20 @@ export async function deleteRecordForGroup(groupId: string, recordId: string) {
   if (!data?.length) throw new Error('Record not found.')
 }
 
-export async function createRecordForGroup(groupId: string, data: Record<string, unknown>, organizationId: string, userId?: string) {
-  const { supabase } = await requireUserProfile()
+export async function createRecordForGroup(
+  groupId: string,
+  data: Record<string, unknown>,
+  userId?: string,
+) {
+  const { supabase, profile } = await requireUserProfile()
+  const sanitizedData = await sanitizeRecordDataForGroup(groupId, data)
   const { data: row, error } = await supabase
     .from('records')
     .insert({
       group_id: groupId,
-      organization_id: organizationId,
-      data,
-      created_by: userId ?? null,
+      organization_id: profile.organization_id,
+      data: sanitizedData,
+      created_by: userId ?? profile.id,
     })
     .select('*')
     .single()
@@ -140,23 +168,42 @@ export async function createAssetRecordForCurrentOrg(draft: AssetIntakeDraft) {
   const { profile } = await requireUserProfile()
   const group = await requireAssetsGroup()
   const data = intakeDraftToRecordData(draft)
-  return createRecordForGroup(group.id, data, profile.organization_id, profile.id)
+  return createRecordForGroup(group.id, data, profile.id)
 }
 
 export async function importAssetRecordsForCurrentOrg(records: ImportAssetRecord[]) {
-  const { supabase, profile } = await requireUserProfile()
-  const group = await requireAssetsGroup()
+  const { records: inserted } = await importRecordsForGroup(
+    'assets',
+    records.map((record) => importRecordToAssetData(record)),
+  )
+  return inserted
+}
 
-  const payload = records.map((record) => ({
+export async function importPeopleRecordsForCurrentOrg(records: ImportPeopleRecord[]) {
+  return importRecordsForGroup(
+    'people',
+    records.map((record) => importRecordToPeopleData(record)),
+  )
+}
+
+export async function importRecordsForGroup(groupSlug: string, recordData: Record<string, unknown>[]) {
+  const { supabase, profile } = await requireUserProfile()
+  const group = await getGroupBySlug(groupSlug)
+  if (!group) {
+    throw new Error(`${groupSlug} group is not configured for this organization.`)
+  }
+
+  const fields = await listFieldsForGroup(group.id)
+  const payload = recordData.map((data) => ({
     group_id: group.id,
     organization_id: profile.organization_id,
-    data: importRecordToAssetData(record),
+    data: sanitizeRecordData(data, fields).data,
     created_by: profile.id,
   }))
 
   const { data, error } = await supabase.from('records').insert(payload).select('*')
   if (error) throw new Error(error.message)
-  return (data ?? []) as DbRecord[]
+  return { group, records: (data ?? []) as DbRecord[] }
 }
 
 /** Backward-compatible asset shape for routes that still return DbAsset-like payloads. */
@@ -201,19 +248,19 @@ export async function importLegacyAssetsForCurrentOrg(records: ImportAssetRecord
 }
 
 export async function listGroupsWithCounts() {
-  const { supabase, profile } = await requireUserProfile()
+  const { supabase } = await requireUserProfile()
 
-  const [groupsResult, recordsResult] = await Promise.all([
+  const [groupsResult, countsResult] = await Promise.all([
     supabase.from('groups').select('*').order('sort_order', { ascending: true }),
-    supabase.from('records').select('group_id').eq('organization_id', profile.organization_id),
+    supabase.rpc('get_group_record_counts'),
   ])
 
   if (groupsResult.error) throw new Error(groupsResult.error.message)
-  if (recordsResult.error) throw new Error(recordsResult.error.message)
+  if (countsResult.error) throw new Error(countsResult.error.message)
 
   const counts = new Map<string, number>()
-  for (const row of recordsResult.data ?? []) {
-    counts.set(row.group_id, (counts.get(row.group_id) ?? 0) + 1)
+  for (const row of (countsResult.data ?? []) as Array<{ group_id: string; record_count: number }>) {
+    counts.set(row.group_id, Number(row.record_count) || 0)
   }
 
   return ((groupsResult.data ?? []) as DbGroup[]).map((group) => ({
@@ -338,47 +385,21 @@ export type UpsertFieldInput = {
 export async function replaceFieldsForGroup(groupId: string, fields: UpsertFieldInput[]) {
   const { supabase } = await requireUserProfile()
 
-  const { data: existing, error: existingError } = await supabase
-    .from('fields')
-    .select('id, key')
-    .eq('group_id', groupId)
-  if (existingError) throw new Error(existingError.message)
+  const payload = fields.map((field) => ({
+    id: field.id ?? null,
+    key: field.key,
+    label: field.label,
+    type: field.type,
+    options: field.options ?? {},
+    sort_order: field.sort_order,
+    required: field.required ?? false,
+  }))
 
-  const incomingKeys = new Set(fields.map((f) => f.key))
-  const toDelete = (existing ?? []).filter((f) => !incomingKeys.has(f.key)).map((f) => f.id)
-
-  if (toDelete.length) {
-    const { error: deleteError } = await supabase.from('fields').delete().in('id', toDelete)
-    if (deleteError) throw new Error(deleteError.message)
-  }
-
-  for (const field of fields) {
-    const payload = {
-      group_id: groupId,
-      key: field.key,
-      label: field.label,
-      type: field.type,
-      options: field.options ?? {},
-      sort_order: field.sort_order,
-      required: field.required ?? false,
-    }
-
-    if (field.id) {
-      const { data: updated, error } = await supabase
-        .from('fields')
-        .update(payload)
-        .eq('id', field.id)
-        .eq('group_id', groupId)
-        .select('id')
-      if (error) throw new Error(error.message)
-      if (!updated?.length) {
-        throw new Error(`Field "${field.key}" was not found in this group.`)
-      }
-    } else {
-      const { error } = await supabase.from('fields').insert(payload)
-      if (error) throw new Error(error.message)
-    }
-  }
+  const { error } = await supabase.rpc('replace_group_fields_atomic', {
+    p_group_id: groupId,
+    p_fields: payload,
+  })
+  if (error) throw new Error(error.message)
 
   return listFieldsForGroup(groupId)
 }

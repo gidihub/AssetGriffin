@@ -5,21 +5,12 @@ import { MarketingFooter } from '@/components/marketing/marketing-footer'
 import { SubPageHero } from '@/components/marketing/sub-page-hero'
 import { CtaBand } from '@/components/marketing/cta-band'
 import { IndexCardGrid, type IndexCardGroup } from '@/components/marketing/index-card-grid'
-import { compareTargets } from '@/lib/compare-data'
+import { compareCardSubtitles, compareTargets } from '@/lib/compare-data'
 
 export const metadata: Metadata = {
   title: 'Compare Asset Tracking Software | AssetGriffin',
   description:
     'Honest, feature-by-feature comparisons of AssetGriffin against AssetTiger, Asset Panda, EZOfficeInventory, Reftab, Snipe-IT, and Sortly.',
-}
-
-const cardMeta: Record<string, string> = {
-  assettiger: 'Free tier limits and search at scale',
-  'asset-panda': 'Pricing model and integration depth',
-  ezofficeinventory: 'Setup complexity and mobile experience',
-  reftab: 'Feature depth beyond IT assets',
-  'snipe-it': 'Hosted vs. self-managed tradeoffs',
-  sortly: 'Search performance at scale',
 }
 
 const groups: IndexCardGroup[] = [
@@ -28,7 +19,7 @@ const groups: IndexCardGroup[] = [
       href: `/compare/${target.slug}`,
       icon: ArrowLeftRight,
       title: target.navLabel,
-      description: cardMeta[target.slug] ?? 'See how we compare',
+      description: compareCardSubtitles[target.slug] ?? 'See how we compare',
     })),
   },
 ]

@@ -1,7 +1,7 @@
 -- Claim consumption transaction before refunding credits on usage release.
 
 create or replace function public.release_griffin_vision_usage(p_usage_log_id uuid)
-returns void
+returns boolean
 language plpgsql
 security definer
 set search_path = public
@@ -18,7 +18,7 @@ begin
   where l.id = p_usage_log_id;
 
   if not found then
-    return;
+    return false;
   end if;
 
   if v_org_id is distinct from public.current_user_organization_id() then
@@ -26,7 +26,8 @@ begin
   end if;
 
   if v_created_at < now() - v_release_window then
-    return;
+    raise notice 'RELEASE_WINDOW_EXPIRED: usage log % is outside the release window', p_usage_log_id;
+    return false;
   end if;
 
   if v_billing_source = 'purchased_credit' then
@@ -35,15 +36,16 @@ begin
       and t.transaction_type = 'consumption';
 
     if not found then
-      return;
+      return false;
     end if;
 
     perform public.apply_griffin_vision_credit_delta(v_org_id, 1);
   elsif v_billing_source <> 'tier_allowance' then
-    return;
+    return false;
   end if;
 
   delete from public.ai_usage_log l where l.id = p_usage_log_id;
+  return true;
 end;
 $$;
 

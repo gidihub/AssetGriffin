@@ -22,7 +22,7 @@ export const FIELD_TYPES = [
 export type FieldType = (typeof FIELD_TYPES)[number]
 
 /** json is reserved for structured sub-objects only — not a general query/filter fallback. */
-export const JSON_FIELD_KEYS = ['lifecycle_dates', 'it_details'] as const
+export const JSON_FIELD_KEYS = ['lifecycle_dates', 'it_details', 'security_monitoring_software'] as const
 
 export type RelationFieldOptions = {
   target_group_id: string
@@ -82,6 +82,16 @@ export const ASSET_RECORD_KEYS = [
   'notes',
   'lifecycle_stage',
   'lifecycle_dates',
+  'brand',
+  'device_type',
+  'model',
+  'operating_system',
+  'processor',
+  'ram',
+  'storage',
+  'color',
+  'mdm_enrollment_status',
+  'security_monitoring_software',
   'it_details',
 ] as const
 
@@ -123,5 +133,15 @@ export type AssetRecordData = {
   notes: string
   lifecycle_stage: string
   lifecycle_dates: Record<string, string>
-  it_details: Record<string, unknown> | null
+  brand?: string
+  device_type?: string
+  model?: string
+  operating_system?: string
+  processor?: string
+  ram?: string
+  storage?: string
+  color?: string
+  mdm_enrollment_status?: string
+  security_monitoring_software?: Record<string, unknown> | null
+  it_details?: Record<string, unknown> | null
 }

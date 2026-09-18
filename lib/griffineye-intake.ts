@@ -51,15 +51,20 @@ export type GriffinEyeVisionResult = GriffinEyeVisionFields & {
   /** Fields where different photos disagreed — left blank for user review. */
   fieldConflicts: GriffinEyeFieldConflict[]
   populatedFieldCount: number
-  usage?: GriffinVisionUsageSnapshot
+  usage?: GriffinVisionUsageSnapshot | null
 }
 
 export type GriffinEyeVisionErrorResponse = {
   error: string
-  code?: 'VISION_CAP_EXCEEDED'
+  code?: 'VISION_CAP_EXCEEDED' | 'ABUSE_CAP_EXCEEDED'
   used?: number
   cap?: number
   tier?: string
+  overageUsed?: number
+  overageChargeUsd?: number
+  totalUsed?: number
+  abuseCeiling?: number
+  /** @deprecated Legacy purchased scan balance — pack sales removed. */
   creditBalance?: number
 }
 
@@ -77,4 +82,18 @@ export type AssetIntakeDraft = {
   safetyNotes?: string
   assignedTo?: string
   location?: string
+  /** Parsed specification fields (reviewed before save). */
+  brand?: string
+  device_type?: string
+  modelField?: string
+  operating_system?: string
+  processor?: string
+  ram?: string
+  storage?: string
+  color?: string
+  mdm_enrollment_status?: string
+  security_monitoring_software?: string[]
+  categoryHint?: string
+  cleanName?: string
+  specDumpOriginalName?: string
 }

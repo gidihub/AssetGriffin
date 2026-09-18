@@ -1,9 +1,9 @@
 import { extractAssetFromPhotos } from '@/lib/griffineye-vision'
 import {
-  buildVisionCapMessage,
   getVisionUsageSnapshot,
   releaseVisionUsage,
   reserveVisionUsage,
+  visionCapExceededPayload,
 } from '@/lib/griffin-vision-usage'
 import { assertGriffinEyeAccess } from '@/lib/griffineye-security/access-guard'
 import { GriffinEyeValidationError, parseGriffinVisionFormData } from '@/lib/griffineye-security/validate-input'
@@ -12,7 +12,7 @@ import { requireUserProfile } from '@/lib/supabase/session'
 export const runtime = 'nodejs'
 
 type VisionCapError = Error & {
-  code: 'VISION_CAP_EXCEEDED'
+  code: 'VISION_CAP_EXCEEDED' | 'ABUSE_CAP_EXCEEDED'
   snapshot: Awaited<ReturnType<typeof getVisionUsageSnapshot>>
 }
 
@@ -39,7 +39,12 @@ export async function POST(request: Request) {
       throw extractError
     }
 
-    const usage = await getVisionUsageSnapshot(supabase, profile.organization_id)
+    let usage: Awaited<ReturnType<typeof getVisionUsageSnapshot>> | null = null
+    try {
+      usage = await getVisionUsageSnapshot(supabase, profile.organization_id)
+    } catch (usageError) {
+      console.error('[griffin-vision/usage-snapshot]', usageError)
+    }
 
     return Response.json({ ...extraction, usage, billingSource })
   } catch (error) {
@@ -49,19 +54,13 @@ export async function POST(request: Request) {
       return Response.json({ error: error.message }, { status: error.status })
     }
 
-    if (error instanceof Error && (error as VisionCapError).code === 'VISION_CAP_EXCEEDED') {
-      const snapshot = (error as VisionCapError).snapshot
-      return Response.json(
-        {
-          error: buildVisionCapMessage(snapshot),
-          code: 'VISION_CAP_EXCEEDED',
-          used: snapshot.used,
-          cap: snapshot.cap,
-          tier: snapshot.tier,
-          creditBalance: snapshot.creditBalance,
-        },
-        { status: 429 },
-      )
+    if (
+      error instanceof Error &&
+      ((error as VisionCapError).code === 'VISION_CAP_EXCEEDED' ||
+        (error as VisionCapError).code === 'ABUSE_CAP_EXCEEDED')
+    ) {
+      const capError = error as VisionCapError
+      return Response.json(visionCapExceededPayload(capError.snapshot, capError.code), { status: 429 })
     }
 
     const message = error instanceof Error ? error.message : 'GriffinEye photo extraction failed.'

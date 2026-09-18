@@ -1,10 +1,15 @@
-import { extractAssetsFromSpreadsheet } from '@/lib/griffineye-import'
+import { parseExtractTargetGroup } from '@/lib/group-import'
+import {
+  extractAssetsFromSpreadsheet,
+  isSupportedSpreadsheetName,
+  parseSpreadsheetUpload,
+} from '@/lib/griffineye-import'
+import { extractPeopleFromSpreadsheet } from '@/lib/griffineye-people-import'
 import { requireUser } from '@/lib/supabase/session'
 
 export const runtime = 'nodejs'
 
 const MAX_BYTES = 5 * 1024 * 1024
-const ALLOWED_TYPES = new Set(['text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/csv'])
 
 export async function POST(request: Request) {
   try {
@@ -25,15 +30,19 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Spreadsheet must be 5 MB or smaller.' }, { status: 400 })
     }
 
-    const isCsvName = file.name.toLowerCase().endsWith('.csv')
-    if (!isCsvName && file.type && !ALLOWED_TYPES.has(file.type)) {
-      return Response.json({ error: 'Upload a CSV export for now.' }, { status: 400 })
+    if (!isSupportedSpreadsheetName(file.name)) {
+      return Response.json({ error: 'Upload a CSV or Excel file (.csv, .xlsx, .xls).' }, { status: 400 })
     }
 
-    const csvText = await file.text()
-    const extraction = await extractAssetsFromSpreadsheet(csvText)
+    const targetGroup = parseExtractTargetGroup(formData.get('targetGroup'))
+    const buffer = await file.arrayBuffer()
+    const table = parseSpreadsheetUpload(buffer, file.name)
+    const extraction =
+      targetGroup === 'people'
+        ? await extractPeopleFromSpreadsheet(table)
+        : await extractAssetsFromSpreadsheet(table)
 
-    return Response.json(extraction)
+    return Response.json({ ...extraction, targetGroup })
   } catch (error) {
     console.error('[griffin-extract]', error)
     const message = error instanceof Error ? error.message : 'GriffinEye import extraction failed.'

@@ -31,8 +31,8 @@ export function slugifyGroupName(name: string): string {
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
     .slice(0, 48)
+    .replace(/^-+|-+$/g, '')
 
   if (!slug) {
     throw new Error('Group name must contain at least one letter or number (A–Z, 0–9).')

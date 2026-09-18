@@ -29,18 +29,22 @@ export async function verifyCreditCheckoutSession(
   }
 
   const admin = createAdminClient()
-  const { data: transaction } = await admin
+  const { data: transaction, error: transactionError } = await admin
     .from('ai_credit_transactions')
     .select('pack_key, credits_delta')
     .eq('stripe_checkout_session_id', sessionId)
     .eq('transaction_type', 'purchase')
     .maybeSingle()
 
-  const { data: organization } = await admin
+  if (transactionError) throw new Error(transactionError.message)
+
+  const { data: organization, error: organizationError } = await admin
     .from('organizations')
     .select('griffin_vision_credits_balance')
     .eq('id', organizationId)
     .single()
+
+  if (organizationError) throw new Error(organizationError.message)
 
   const packKey = session.metadata.pack_key
   const pack = packKey ? getCreditPack(packKey) : null

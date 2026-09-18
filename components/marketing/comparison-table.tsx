@@ -4,15 +4,20 @@ export interface ComparisonRow {
   label: string
   valueA: string
   valueB: string
+  valueC?: string
   aWins?: boolean
 }
 
 interface ComparisonTableProps {
   competitorName: string
   rows: ComparisonRow[]
+  /** Optional third column header (e.g. Snipe-IT hosted vs self-hosted). */
+  extraColumnHeader?: string
 }
 
-export function ComparisonTable({ competitorName, rows }: ComparisonTableProps) {
+export function ComparisonTable({ competitorName, rows, extraColumnHeader }: ComparisonTableProps) {
+  const hasThirdColumn = Boolean(extraColumnHeader && rows.some((row) => row.valueC))
+
   return (
     <div className="overflow-x-auto rounded-2xl border border-border">
       <table className="w-full min-w-[560px] border-collapse text-left">
@@ -21,6 +26,11 @@ export function ComparisonTable({ competitorName, rows }: ComparisonTableProps) 
             <th className="p-4 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">Category</th>
             <th className="p-4 font-mono text-xs uppercase tracking-[0.08em] text-primary">AssetGriffin</th>
             <th className="p-4 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">{competitorName}</th>
+            {hasThirdColumn ? (
+              <th className="p-4 font-mono text-xs uppercase tracking-[0.08em] text-muted-foreground">
+                {extraColumnHeader}
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -39,6 +49,14 @@ export function ComparisonTable({ competitorName, rows }: ComparisonTableProps) 
                   {row.valueB}
                 </span>
               </td>
+              {hasThirdColumn ? (
+                <td className="border-t border-border p-4 text-sm text-muted-foreground">
+                  <span className="flex items-start gap-2">
+                    <Minus size={16} className="mt-0.5 flex-shrink-0 text-muted-foreground/60" />
+                    {row.valueC ?? '—'}
+                  </span>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

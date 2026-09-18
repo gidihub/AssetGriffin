@@ -1,29 +1,16 @@
 'use client'
 
-import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Activity,
   ArrowDownToLine,
-  BadgeDollarSign,
-  Code2,
-  CreditCard,
-  KeyRound,
-  Palette,
-  Plug,
-  SlidersHorizontal,
-  UserRound,
   ArrowUpRight,
   Bell,
   Boxes,
   CalendarClock,
   Check,
   ChevronDown,
-  ClipboardCheck,
   ClipboardList,
   CloudUpload,
-  Columns3,
-  FolderKanban,
   Filter,
   LayoutDashboard,
   Menu,
@@ -37,11 +24,13 @@ import {
   Settings2,
   ShieldCheck,
   Upload,
-  Users,
+  UserRound,
   Wrench,
   X,
 } from 'lucide-react'
+import { OrgBrandMark } from '@/components/workspace/org-brand-mark'
 import { GroupPage } from '@/components/workspace/group-page'
+import { StatusBadge } from '@/components/workspace/primitives'
 import { SettingsSection } from '@/components/workspace/settings-pages'
 import { TemplateGallery } from '@/components/onboarding/template-gallery'
 import { GriffinEyeIcon } from '@/components/griffineye/griffineye-icon'
@@ -54,7 +43,10 @@ import type { DataGapSummary } from '@/lib/griffineye-agent/tools'
 import type { DbAuditLogRow } from '@/lib/griffineye-audit'
 import { onboardingTemplates } from '@/lib/onboarding-templates'
 import { logout } from '@/app/login/actions'
+import { invalidateGroupPage } from '@/lib/group-page-cache'
+import { normalizeRecordRef } from '@/lib/record-mappers'
 import { saveIntakeAsset } from '@/lib/save-intake-asset'
+import { scrollPageContentToTop } from '@/lib/scroll-page-content'
 import { groupIcon } from '@/lib/group-icons'
 import type { DbGroup } from '@/lib/supabase/database.types'
 import type { OnboardingTemplateId } from '@/lib/onboarding-templates'
@@ -126,22 +118,12 @@ function toneForAsset(name: string) {
   return ASSET_THUMB_TONES[hash]
 }
 
-function StatusPill({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    'In use': 'status-checked',
-    Available: 'status-stock',
-    'In maintenance': 'status-maintenance',
-    Retired: 'status-maintenance',
-  }
-  return <span className={`status-pill ${styles[status] ?? ''}`}><span className="status-dot" />{status}</span>
-}
-
 export default function Page() {
   const [activeNav, setActiveNav] = useState('Overview')
   const [workspaceGroups, setWorkspaceGroups] = useState<WorkspaceGroup[]>([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeSettings, setActiveSettings] = useState('Profile')
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Workspace: true, Tools: true, Account: true, Organization: true, Administration: true })
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Workspace: true, Tools: true })
   const [showIntake, setShowIntake] = useState(false)
   const [showMigration, setShowMigration] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -150,19 +132,23 @@ export default function Page() {
   const [scanTrigger, setScanTrigger] = useState(0)
   const [assetsGriffinEyeQuery, setAssetsGriffinEyeQuery] = useState<string | null>(null)
   const [assetsOpenRecordRef, setAssetsOpenRecordRef] = useState<string | null>(null)
+  const [assetsListRefreshKey, setAssetsListRefreshKey] = useState(0)
+  const [peopleListRefreshKey, setPeopleListRefreshKey] = useState(0)
+  const [migrationTargetGroup, setMigrationTargetGroup] = useState<'assets' | 'people'>('assets')
   const [dataHealth, setDataHealth] = useState<DataGapSummary[]>([])
   const [totalAssets, setTotalAssets] = useState(0)
   const [maintenanceInitial, setMaintenanceInitial] = useState<{ status?: string; query?: string }>({})
   const [inspectionsInitial, setInspectionsInitial] = useState<{ status?: string; query?: string }>({})
-  const [creditPurchaseNotice, setCreditPurchaseNotice] = useState<'cancelled' | null>(null)
-  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null)
   const [showAssistant, setShowAssistant] = useState(false)
   const [griffinEyeObservations, setGriffinEyeObservations] = useState<GriffinEyeObservation[]>([])
   const [overviewAssets, setOverviewAssets] = useState<AssetRecord[]>([])
   const [auditEvents, setAuditEvents] = useState<DbAuditLogRow[]>([])
   const [workspaceName, setWorkspaceName] = useState('Workspace')
+  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null)
+  const [orgPrimaryColor, setOrgPrimaryColor] = useState('#2FA391')
   const [userFirstName, setUserFirstName] = useState('')
   const [userDisplayName, setUserDisplayName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
   const [userRole, setUserRole] = useState('')
   const [userInitials, setUserInitials] = useState('?')
 
@@ -209,33 +195,36 @@ export default function Page() {
 
   async function loadOverviewData() {
     try {
-      const [workspaceRes, assetsRes, auditRes] = await Promise.all([
+      const [workspaceResult, assetsResult, auditResult] = await Promise.allSettled([
         fetch('/api/workspace'),
         fetch('/api/assets'),
         fetch('/api/audit-log?limit=5'),
       ])
 
-      if (workspaceRes.ok) {
-        const workspace = (await workspaceRes.json()) as {
+      if (workspaceResult.status === 'fulfilled' && workspaceResult.value.ok) {
+        const workspace = (await workspaceResult.value.json()) as {
           profile?: { fullName?: string | null; email?: string; role?: string }
-          organization?: { name?: string }
+          organization?: { name?: string; logoUrl?: string | null; primaryColor?: string }
         }
         const fullName = workspace.profile?.fullName?.trim() ?? ''
         const email = workspace.profile?.email ?? ''
         setWorkspaceName(workspace.organization?.name ?? 'Workspace')
+        setOrgLogoUrl(workspace.organization?.logoUrl ?? null)
+        setOrgPrimaryColor(workspace.organization?.primaryColor ?? '#2FA391')
         setUserFirstName(firstNameFromProfile(fullName, email))
         setUserDisplayName(displayNameFromProfile(fullName, email))
+        setUserEmail(email)
         setUserRole(workspace.profile?.role ?? 'Member')
         setUserInitials(initialsFromLabel(fullName || email.replace(/@.*$/, '').replace(/[._-]+/g, ' ')))
       }
 
-      if (assetsRes.ok) {
-        const assetsPayload = (await assetsRes.json()) as { assets?: AssetRecord[] }
+      if (assetsResult.status === 'fulfilled' && assetsResult.value.ok) {
+        const assetsPayload = (await assetsResult.value.json()) as { assets?: AssetRecord[] }
         setOverviewAssets(assetsPayload.assets ?? [])
       }
 
-      if (auditRes.ok) {
-        const auditPayload = (await auditRes.json()) as { events?: DbAuditLogRow[] }
+      if (auditResult.status === 'fulfilled' && auditResult.value.ok) {
+        const auditPayload = (await auditResult.value.json()) as { events?: DbAuditLogRow[] }
         setAuditEvents(
           (auditPayload.events ?? []).filter((event) => event.metadata?.seed !== DEMO_SEED_ID),
         )
@@ -251,6 +240,14 @@ export default function Page() {
     void loadInsights()
   }, [])
 
+  useEffect(() => {
+    function handleBrandingUpdated() {
+      void loadOverviewData()
+    }
+    window.addEventListener('workspace-branding-updated', handleBrandingUpdated)
+    return () => window.removeEventListener('workspace-branding-updated', handleBrandingUpdated)
+  }, [])
+
   function dismissOnboarding() {
     window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1')
     setShowOnboarding(false)
@@ -261,13 +258,6 @@ export default function Page() {
     if (params.get('settings') === 'Billing') {
       setActiveNav('Settings')
       setActiveSettings('Billing')
-    }
-    const sessionId = params.get('checkoutSessionId')
-    if (sessionId) {
-      setCheckoutSessionId(sessionId)
-    }
-    if (params.get('creditPurchase') === 'cancelled') {
-      setCreditPurchaseNotice('cancelled')
     }
   }, [])
 
@@ -358,8 +348,43 @@ export default function Page() {
   }
 
   function openAssetDetail(assetRef: string) {
-    setAssetsOpenRecordRef(assetRef)
+    const ref = normalizeRecordRef(assetRef)
+    if (!ref) return
+    setAssetsOpenRecordRef(ref)
+    scrollPageContentToTop()
     openGroupSlug('assets')
+  }
+
+  function openImportModal(targetGroup: 'assets' | 'people' = 'assets') {
+    setMigrationTargetGroup(targetGroup)
+    setShowMigration(true)
+  }
+
+  async function handleSpreadsheetImportComplete(
+    targetGroup: 'assets' | 'people',
+    imported: number,
+    photos?: { attached: number; failed: Array<{ assetTag: string; reason: string }> },
+  ) {
+    setShowMigration(false)
+    if (targetGroup === 'people') {
+      invalidateGroupPage('people')
+      setPeopleListRefreshKey((key) => key + 1)
+      await Promise.all([loadOverviewData(), loadGroups(), loadInsights()])
+      announce(`GriffinEye imported ${imported} people into your organization.`)
+      return
+    }
+
+    invalidateGroupPage('assets')
+    setAssetsListRefreshKey((key) => key + 1)
+    await Promise.all([loadOverviewData(), loadGroups(), loadInsights()])
+    let message = `GriffinEye imported ${imported} assets into your organization.`
+    if (photos?.attached) {
+      message += ` ${photos.attached} photo${photos.attached === 1 ? '' : 's'} attached.`
+    }
+    if (photos?.failed.length) {
+      message += ` ${photos.failed.length} photo${photos.failed.length === 1 ? '' : 's'} could not be downloaded.`
+    }
+    announce(message)
   }
 
   function handleGriffinEyeNavigate(target: GriffinEyeNavTarget) {
@@ -384,6 +409,7 @@ export default function Page() {
   const activeGroup = workspaceGroups.find((group) => group.name === activeNav || group.slug === activeNav)
   const toolGroups = workspaceGroups.filter((group) => group.slug === 'reports')
   const navGroups = workspaceGroups.filter((group) => group.slug !== 'reports')
+  const pageTitle = activeNav === 'Settings' ? activeSettings : activeNav
 
   if (showOnboarding) {
     return (
@@ -404,16 +430,16 @@ export default function Page() {
               }
             })()
           }}
-          onUploadClick={() => setShowMigration(true)}
+          onUploadClick={() => openImportModal('assets')}
           onSkip={() => { dismissOnboarding(); announce('You can restart onboarding anytime from Settings.') }}
         />
         {showMigration && (
-          <Modal title="Import center" onClose={() => setShowMigration(false)}>
+          <Modal wide title={migrationTargetGroup === 'people' ? 'Import people' : 'Import center'} onClose={() => setShowMigration(false)}>
             <MigrationModal
-              onComplete={({ imported }) => {
-                setShowMigration(false)
+              targetGroup={migrationTargetGroup}
+              onComplete={({ imported, photos, targetGroup }) => {
                 dismissOnboarding()
-                announce(`GriffinEye imported ${imported} assets into your organization.`)
+                void handleSpreadsheetImportComplete(targetGroup, imported, photos)
               }}
             />
           </Modal>
@@ -426,10 +452,15 @@ export default function Page() {
   return (
     <main className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
-        <div className="sidebar-topbar"><button className="sidebar-toggle" aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-pressed={sidebarCollapsed} onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>{sidebarCollapsed ? <PanelLeftOpen size={19} strokeWidth={1.8} /> : <PanelLeftClose size={19} strokeWidth={1.8} />}</button></div>
-        <div className="brand-lockup">
-          <Image src="/images/assetgriffin-logo.png" alt="AssetGriffin logo" width={29} height={29} className="brand-mark-image" />
-          <div><strong>assetgriffin</strong><span>asset operations</span></div>
+        <div className="app-sidebar-header">
+          <OrgBrandMark
+            brand={{
+              name: workspaceName,
+              logoUrl: orgLogoUrl,
+              primaryColor: orgPrimaryColor,
+            }}
+            compact={sidebarCollapsed}
+          />
         </div>
         <button type="button" className={`sidebar-ask-griffineye${showAssistant ? ' is-active' : ''}`} onClick={() => setShowAssistant((open) => !open)} aria-label="Ask GriffinEye" aria-pressed={showAssistant}>
           <GriffinEyeIcon size={16} />
@@ -473,12 +504,13 @@ export default function Page() {
               <button className="nav-item" onClick={() => { openGroupSlug('assets'); setScanTrigger((n) => n + 1) }}><QrCode size={17} /><span>Scan asset</span></button>
             </div>
           </div>
-          <SettingsGroup title="Account" open={openGroups.Account} onToggle={() => setOpenGroups((groups) => ({ ...groups, Account: !groups.Account }))} items={[['Profile', UserRound], ['Billing', CreditCard], ['Notifications', Bell], ['Preferences', SlidersHorizontal], ['Security', ShieldCheck], ['Integrations', Plug], ['Developer', Code2]]} active={activeSettings} onSelect={navigateToSettings} />
-          <SettingsGroup title="Organization" open={openGroups.Organization} onToggle={() => setOpenGroups((groups) => ({ ...groups, Organization: !groups.Organization }))} items={[['Branding', Palette], ['Spending limits', BadgeDollarSign], ['Roles & permissions', KeyRound], ['Approval groups', ClipboardCheck], ['Groups', FolderKanban], ['Fields', Columns3]]} active={activeSettings} onSelect={navigateToSettings} />
-          <SettingsGroup title="Administration" open={openGroups.Administration} onToggle={() => setOpenGroups((groups) => ({ ...groups, Administration: !groups.Administration }))} items={[['Team', Users], ['Departments', Boxes], ['Workflows', Activity], ['Audit log', ClipboardCheck]]} active={activeSettings} onSelect={navigateToSettings} />
+          <div className="nav-group admin-group">
+            <button className={`nav-item ${activeNav === 'Settings' ? 'active' : ''}`} onClick={() => navigateToSettings('Profile')}>
+              <Settings2 size={17} /><span>Settings</span>
+            </button>
+          </div>
         </nav>
         <div className="sidebar-bottom">
-          <button className="nav-item" onClick={() => announce('Settings are ready for your workspace.')}><Settings2 size={17} /><span>Settings</span></button>
           <div className="upgrade-card"><div className="upgrade-icon"><GriffinEyeIcon size={16} /></div><strong>Make your next move</strong><p>{totalAssets > 0 ? `GriffinEye is tracking ${totalAssets.toLocaleString()} assets in your workspace.` : 'GriffinEye is ready to process your first assets.'}</p><button onClick={() => setShowIntake(true)}>Add assets <ArrowUpRight size={14} /></button></div>
           <form action={logout} className="sidebar-logout-form">
             <button type="submit" className="nav-item sidebar-logout">
@@ -490,13 +522,31 @@ export default function Page() {
         </div>
       </aside>
 
-      <section className={`content-area${showAssistant ? ' ge-chat-open' : ''}`}>
+      <section className={`content-area${activeNav === 'Settings' ? ' content-area-settings' : ''}${showAssistant ? ' ge-chat-open' : ''}`}>
         {!showAssistant && (
           <>
-        <header className="topbar"><button className="mobile-menu" aria-label="Open menu" onClick={() => setSidebarCollapsed(false)}><Menu size={20} /></button><div className="breadcrumb"><span>{workspaceName}</span><span>/</span><strong>{activeNav}</strong></div><div className="top-actions"><button className="topbar-ask-griffineye" onClick={() => setShowAssistant(true)} aria-label="Ask GriffinEye"><GriffinEyeIcon size={14} /><span className="topbar-ask-label">Ask GriffinEye</span><kbd>⌘K</kbd></button><button className="icon-button" aria-label="Notifications" onClick={() => announce('Notifications are not configured yet.')}><Bell size={18} /></button><div className="top-avatar">{userInitials}</div></div></header>
-        <div className="page-content">
-          {activeNav === 'Settings' ? <SettingsSection section={activeSettings} onAnnounce={announce} onNavigateSection={setActiveSettings} onStartOnboarding={() => setShowOnboarding(true)} creditPurchaseNotice={creditPurchaseNotice} checkoutSessionId={checkoutSessionId} /> : activeNav === 'Migration' ? <MigrationPage onOpenImport={() => setShowMigration(true)} /> : activeGroup ? <GroupPage slug={activeGroup.slug} onAnnounce={announce} scanTrigger={activeGroup.slug === 'assets' ? scanTrigger : undefined} initialGriffinEyeQuery={activeGroup.slug === 'assets' ? assetsGriffinEyeQuery : undefined} onInitialGriffinEyeQueryHandled={() => setAssetsGriffinEyeQuery(null)} onOpenSpreadsheetImport={() => setShowMigration(true)} initialStatusFilter={activeGroup.slug === 'maintenance' ? maintenanceInitial.status : activeGroup.slug === 'inspections' ? inspectionsInitial.status : undefined} initialQuery={activeGroup.slug === 'maintenance' ? maintenanceInitial.query : activeGroup.slug === 'inspections' ? inspectionsInitial.query : undefined} onInitialFiltersHandled={() => { setMaintenanceInitial({}); setInspectionsInitial({}) }} initialOpenRecordRef={activeGroup.slug === 'assets' ? assetsOpenRecordRef : undefined} onInitialOpenRecordHandled={() => setAssetsOpenRecordRef(null)} onOpenRecordDetail={(ref) => setAssetsOpenRecordRef(ref)} /> : <>
-          <div className="page-heading"><div className="heading-icon-row"><div className="heading-icon-badge"><LayoutDashboard size={22} /></div><div><p className="eyebrow">{formatOverviewDate()}</p><h1>Hello, {userFirstName || 'there'}.</h1><p className="heading-sub">Here’s what’s happening across your asset portfolio.</p></div></div><div className="heading-actions"><button className="button secondary" onClick={() => setShowMigration(true)}><Upload size={16} /> Import assets</button><button className="button primary" onClick={() => setShowAssistant(true)}><GriffinEyeIcon size={16} /> Ask GriffinEye</button></div></div>
+        <header className="topbar">
+          <div className="topbar-start">
+            <button className="mobile-menu" aria-label="Open menu" onClick={() => setSidebarCollapsed(false)}><Menu size={20} /></button>
+            <button
+              type="button"
+              className="sidebar-toggle"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-pressed={sidebarCollapsed}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} strokeWidth={1.8} /> : <PanelLeftClose size={18} strokeWidth={1.8} />}
+            </button>
+            <div className="breadcrumb"><strong>{pageTitle}</strong></div>
+          </div>
+          <div className="top-actions">
+            <button className="icon-button" aria-label="Notifications" onClick={() => announce('Notifications are not configured yet.')}><Bell size={18} /></button>
+            <div className="top-avatar">{userInitials}</div>
+          </div>
+        </header>
+        <div className={`page-content${activeNav === 'Settings' ? ' page-content-settings' : ''}`}>
+          {activeNav === 'Settings' ? <SettingsSection section={activeSettings} onAnnounce={announce} onNavigateSection={setActiveSettings} onStartOnboarding={() => setShowOnboarding(true)} userName={userDisplayName || 'Account'} userEmail={userEmail} userInitials={userInitials} /> : activeNav === 'Migration' ? <MigrationPage onOpenImport={() => openImportModal('assets')} /> : activeGroup ? <GroupPage slug={activeGroup.slug} onAnnounce={announce} scanTrigger={activeGroup.slug === 'assets' ? scanTrigger : undefined} initialGriffinEyeQuery={activeGroup.slug === 'assets' ? assetsGriffinEyeQuery : undefined} onInitialGriffinEyeQueryHandled={() => setAssetsGriffinEyeQuery(null)} onOpenSpreadsheetImport={() => openImportModal(activeGroup.slug === 'people' ? 'people' : 'assets')} initialStatusFilter={activeGroup.slug === 'maintenance' ? maintenanceInitial.status : activeGroup.slug === 'inspections' ? inspectionsInitial.status : undefined} initialQuery={activeGroup.slug === 'maintenance' ? maintenanceInitial.query : activeGroup.slug === 'inspections' ? inspectionsInitial.query : undefined} onInitialFiltersHandled={() => { setMaintenanceInitial({}); setInspectionsInitial({}) }} initialOpenRecordRef={activeGroup.slug === 'assets' ? assetsOpenRecordRef : undefined} onInitialOpenRecordHandled={() => setAssetsOpenRecordRef(null)} onOpenRecordDetail={(ref) => setAssetsOpenRecordRef(normalizeRecordRef(ref) || null)} listRefreshKey={activeGroup.slug === 'assets' ? assetsListRefreshKey : activeGroup.slug === 'people' ? peopleListRefreshKey : undefined} /> : <>
+          <div className="page-heading"><div className="heading-icon-row"><div className="heading-icon-badge"><LayoutDashboard size={22} /></div><div><p className="eyebrow">{formatOverviewDate()}</p><h1>Hello, {userFirstName || 'there'}.</h1><p className="heading-sub">Here’s what’s happening across your asset portfolio.</p></div></div><div className="heading-actions"><button className="button secondary" onClick={() => openImportModal('assets')}><Upload size={16} /> Import assets</button><button className="button primary" onClick={() => setShowAssistant(true)}><GriffinEyeIcon size={16} /> Ask GriffinEye</button></div></div>
 
           <div className="metric-grid">
             <div className="metric-card feature-metric"><div className="metric-top"><span className="metric-label">Total assets</span><span className="metric-icon coral-icon"><Boxes size={18} /></span></div><div className="metric-value">{totalAssets.toLocaleString()}</div><div className="metric-foot"><span>{overviewAssets.length ? 'Live inventory from your workspace' : 'Import or add assets to get started'}</span></div></div>
@@ -546,7 +596,7 @@ export default function Page() {
             </section>
           ) : null}
 
-          <section className="panel assets-panel"><div className="panel-header assets-header"><div><h2>Asset directory</h2><p>Browse, search, and manage your inventory</p></div><button className="button secondary small" onClick={() => setShowIntake(true)}><Plus size={15} /> Add asset</button></div><div className="table-toolbar"><div className="search-wrap"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search assets, serials, people..." /></div><button className="filter-button" onClick={() => openGroupSlug('assets')}><Filter size={15} /> Open filters</button></div><div className="asset-table-wrap"><table className="asset-table"><thead><tr><th>Asset</th><th>Tag / serial</th><th>Assigned to</th><th>Location</th><th>Status</th><th /></tr></thead><tbody>{previewAssets.map((asset) => <tr key={asset.id} className="clickable-row" onClick={() => openAssetDetail(asset.id)}><td><div className="asset-name"><div className={`asset-thumb ${toneForAsset(asset.name)}`}><Package size={17} /></div><div><strong>{asset.name}</strong><span>{asset.category}</span></div></div></td><td><strong className="mono">{asset.id}</strong><span className="table-muted">{asset.serial || '—'}</span></td><td>{asset.assignedTo}</td><td>{asset.location}</td><td><StatusPill status={asset.status} /></td><td><button type="button" className="text-button row-view-button" aria-label={`View ${asset.name}`} onClick={(event) => { event.stopPropagation(); openAssetDetail(asset.id) }}>View</button></td></tr>)}</tbody></table>{previewAssets.length === 0 && <div className="empty-search">{query ? `No assets found for “${query}”.` : 'No assets yet — import a spreadsheet or add your first asset.'}</div>}</div><div className="table-footer"><span>Showing {previewAssets.length} of {totalAssets.toLocaleString()} assets</span><button className="text-button" onClick={() => openGroupSlug('assets')}>Open directory <ArrowUpRight size={14} /></button></div></section>
+          <section className="panel assets-panel"><div className="panel-header assets-header"><div><h2>Asset directory</h2><p>Browse, search, and manage your inventory</p></div><button className="button secondary small" onClick={() => setShowIntake(true)}><Plus size={15} /> Add asset</button></div><div className="table-toolbar"><div className="search-wrap"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search assets, serials, people..." /></div><button className="filter-button" onClick={() => openGroupSlug('assets')}><Filter size={15} /> Open filters</button></div><div className="asset-table-wrap"><table className="asset-table"><thead><tr><th>Asset</th><th>Tag / serial</th><th>Assigned to</th><th>Location</th><th>Status</th><th /></tr></thead><tbody>{previewAssets.map((asset) => <tr key={asset.id} className="clickable-row" onClick={() => openAssetDetail(asset.id)}><td><div className="asset-name"><div className={`asset-thumb ${toneForAsset(asset.name)}`}><Package size={17} /></div><div><strong>{asset.name}</strong><span>{asset.category}</span></div></div></td><td><span className="mono-muted">{asset.id}</span><span className="mono-muted">{asset.serial || '—'}</span></td><td>{asset.assignedTo}</td><td>{asset.location}</td><td><StatusBadge status={asset.status} /></td><td><button type="button" className="text-button row-view-button" aria-label={`View ${asset.name}`} onClick={(event) => { event.stopPropagation(); openAssetDetail(asset.id) }}>View</button></td></tr>)}</tbody></table>{previewAssets.length === 0 && <div className="empty-search">{query ? `No assets found for “${query}”.` : 'No assets yet — import a spreadsheet or add your first asset.'}</div>}</div><div className="table-footer"><span>Showing {previewAssets.length} of {totalAssets.toLocaleString()} assets</span><button className="text-button" onClick={() => openGroupSlug('assets')}>Open directory <ArrowUpRight size={14} /></button></div></section>
 
           <div className="bottom-grid"><section className="panel ai-card"><div className="ai-glow"><GriffinEyeIcon size={19} /></div><div><span className="eyebrow coral-eyebrow">GRIFFINEYE</span><h2>Turn a photo or a sentence into an asset.</h2><p>Snap a label or just describe the item in plain words — GriffinEye extracts the details for your review. It also reads spreadsheets and maps them to the right fields automatically.</p><button className="button dark small" onClick={() => setShowIntake(true)}>Start asset intake <ArrowUpRight size={14} /></button></div><div className="ai-scan"><QrCode size={50} strokeWidth={1.2} /><span>Scan anything</span></div></section></div>
           </>}
@@ -581,18 +631,17 @@ export default function Page() {
             }}
             onOpenSpreadsheetImport={() => {
               setShowIntake(false)
-              setShowMigration(true)
+              openImportModal('assets')
             }}
           />
         </Modal>
       )}
       {showMigration && (
-        <Modal title="Import center" onClose={() => setShowMigration(false)}>
+        <Modal wide title={migrationTargetGroup === 'people' ? 'Import people' : 'Import center'} onClose={() => setShowMigration(false)}>
           <MigrationModal
-            onComplete={async ({ imported }) => {
-              setShowMigration(false)
-              await Promise.all([loadOverviewData(), loadGroups(), loadInsights()])
-              announce(`GriffinEye imported ${imported} assets into your organization.`)
+            targetGroup={migrationTargetGroup}
+            onComplete={({ imported, photos, targetGroup }) => {
+              void handleSpreadsheetImportComplete(targetGroup, imported, photos)
             }}
           />
         </Modal>
@@ -602,9 +651,6 @@ export default function Page() {
   )
 }
 
-function SettingsGroup({ title, open, onToggle, items, active, onSelect }: { title: string; open: boolean; onToggle: () => void; items: [string, React.ComponentType<{ size?: number } >][]; active: string; onSelect: (label: string) => void }) {
-  return <div className="nav-group settings-group"><button className="nav-group-toggle" aria-expanded={open} onClick={onToggle}><span className="nav-label">{title}</span><ChevronDown className={`nav-chevron ${open ? 'is-open' : ''}`} size={15} /></button><div className={`nav-group-items ${open ? 'is-open' : ''}`}>{items.map(([label, Icon]) => <button key={label} className={`nav-item ${active === label ? 'active' : ''}`} onClick={() => onSelect(label)}><Icon size={17} /><span>{label}</span></button>)}</div></div>
-}
 function MigrationPage({ onOpenImport }: { onOpenImport: () => void }) {
   return (
     <div className="workspace-screen">
@@ -614,7 +660,7 @@ function MigrationPage({ onOpenImport }: { onOpenImport: () => void }) {
           <div>
             <span className="eyebrow">IMPORT CENTER</span>
             <h1>Bring your data with you.</h1>
-            <p>Move from AssetTiger, spreadsheets, or another system without rebuilding your inventory.</p>
+            <p>Move from spreadsheets or another system without rebuilding your inventory.</p>
           </div>
         </div>
         <button className="button primary" onClick={onOpenImport}><Upload size={16} /> Start import</button>
@@ -665,4 +711,4 @@ function auditColorForCategory(category: DbAuditLogRow['category']) {
 }
 function ActivityRow({ icon, color, title, detail, time }: { icon: React.ReactNode; color: string; title: string; detail: string; time: string }) { return <div className="activity-row"><div className={`activity-icon ${color}`}>{icon}</div><div className="activity-copy"><strong>{title}</strong><span>{detail}</span></div><time>{time}</time></div> }
 function AttentionRow({ icon, title, detail, critical }: { icon: React.ReactNode; title: string; detail: string; critical?: boolean }) { return <div className="attention-row"><div className={`attention-icon ${critical ? 'critical' : ''}`}>{icon}</div><div><strong>{title}</strong><span>{detail}</span></div><ArrowUpRight size={15} /></div> }
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-header"><div><span className="eyebrow">ASSETGRIFFIN WORKFLOW</span><h2 id="modal-title">{title}</h2></div><button className="close-button" onClick={onClose} aria-label="Close dialog"><X size={18} /></button></div>{children}</div></div> }
+function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) { return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className={`modal${wide ? ' modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-header"><div><span className="eyebrow">ASSETGRIFFIN WORKFLOW</span><h2 id="modal-title">{title}</h2></div><button className="close-button" onClick={onClose} aria-label="Close dialog"><X size={18} /></button></div>{children}</div></div> }

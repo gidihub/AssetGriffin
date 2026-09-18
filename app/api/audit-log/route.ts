@@ -5,6 +5,7 @@ export const runtime = 'nodejs'
 
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 500
+const EXPORT_LIMIT = 5000
 
 export async function GET(request: Request) {
   try {
@@ -16,7 +17,10 @@ export async function GET(request: Request) {
       ? (requested as AuditCategory)
       : null
 
-    const limit = Math.min(MAX_LIMIT, Math.max(1, Number(params.get('limit')) || DEFAULT_LIMIT))
+    const isExport = params.get('export') === '1'
+    const requestedLimit = Number(params.get('limit')) || (isExport ? EXPORT_LIMIT : DEFAULT_LIMIT)
+    const cap = isExport ? EXPORT_LIMIT : MAX_LIMIT
+    const limit = Math.min(cap, Math.max(1, requestedLimit))
     const entityId = params.get('entity_id')?.trim() || null
 
     let query = supabase

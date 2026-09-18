@@ -80,17 +80,19 @@ export function GroupsSettings({ onAnnounce }: { onAnnounce: Announce }) {
             <p>Add a new record type to your workspace — for example Vehicles or Contracts.</p>
           </div>
         </div>
-        <form className="settings-inline-form" onSubmit={handleCreate}>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Group name"
-            aria-label="Group name"
-          />
-          <button className="button primary small" type="submit" disabled={saving || !name.trim()}>
-            <Plus size={14} /> {saving ? 'Creating…' : 'Create group'}
-          </button>
-        </form>
+        <div className="settings-card-body">
+          <form className="settings-inline-form" onSubmit={handleCreate}>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Group name"
+              aria-label="Group name"
+            />
+            <button className="button primary small" type="submit" disabled={saving || !name.trim()}>
+              <Plus size={14} /> {saving ? 'Creating…' : 'Create group'}
+            </button>
+          </form>
+        </div>
       </div>
 
       <div className="settings-card">
@@ -100,6 +102,7 @@ export function GroupsSettings({ onAnnounce }: { onAnnounce: Announce }) {
             <p>Each group has its own fields and records. Slugs are generated from the name.</p>
           </div>
         </div>
+        <div className="settings-card-body settings-card-body--compact">
         {loading ? (
           <EmptyState title="Loading groups…" description="Fetching your workspace configuration." />
         ) : (
@@ -145,6 +148,7 @@ export function GroupsSettings({ onAnnounce }: { onAnnounce: Announce }) {
             emptyState={<EmptyState title="No groups yet" description="Create your first group above." />}
           />
         )}
+        </div>
       </div>
     </div>
   )

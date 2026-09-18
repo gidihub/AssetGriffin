@@ -1,10 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+function parsePositiveNumber(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 /** Estimated USD per GriffinEye action for daily spend ceiling (env-tunable). */
-export const GRIFFINEYE_ESTIMATED_COST_USD = Number(process.env.GRIFFINEYE_ESTIMATED_COST_USD ?? 0.02)
+export const GRIFFINEYE_ESTIMATED_COST_USD = parsePositiveNumber(process.env.GRIFFINEYE_ESTIMATED_COST_USD, 0.02)
 
 /** Org-wide daily spend backstop across all GriffinEye endpoints. */
-export const GRIFFINEYE_DAILY_SPEND_CAP_USD = Number(process.env.GRIFFINEYE_DAILY_SPEND_CAP_USD ?? 25)
+export const GRIFFINEYE_DAILY_SPEND_CAP_USD = parsePositiveNumber(process.env.GRIFFINEYE_DAILY_SPEND_CAP_USD, 25)
 
 export type SpendBreakerResult =
   | { allowed: true; actionsToday: number; estimatedSpendUsd: number }

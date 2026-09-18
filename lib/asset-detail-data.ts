@@ -193,7 +193,7 @@ export function actionEventToFeedItem(event: ActionEventRow): AssetEventItem {
     when: event.performedAt,
     title: event.actionName,
     detail: String(event.data.notes ?? 'Record updated'),
-    actor: event.performedBy ?? 'Workspace member',
+    actor: event.performedBy?.trim() || 'Workspace member',
     source: 'action',
   }
 }
@@ -227,7 +227,7 @@ export function fieldHistoryFromActionEvents(events: ActionEventRow[]): FieldHis
         field: key.replace(/_/g, ' '),
         from: from || '—',
         to: to || '—',
-        actor: event.performedBy ?? 'Workspace member',
+        actor: event.performedBy?.trim() || 'Workspace member',
       })
     }
   }

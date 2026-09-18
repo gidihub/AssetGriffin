@@ -1,5 +1,16 @@
+import * as XLSX from 'xlsx'
+import { detectPhotoUrlColumn, normalizeImportPhotoUrl } from '@/lib/import-photo-url'
 import { getOpenAIClient, GRIFFINEYE_AI_MODEL } from '@/lib/openai'
 import type { AssetStatus, LifecycleStage } from '@/lib/supabase/database.types'
+
+export type SpreadsheetTable = { headers: string[]; rows: string[][] }
+
+const SPREADSHEET_EXTENSIONS = ['.csv', '.txt', '.xlsx', '.xls'] as const
+
+export function isSupportedSpreadsheetName(fileName: string): boolean {
+  const lower = fileName.toLowerCase()
+  return SPREADSHEET_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
 
 export type ImportAssetRecord = {
   asset_tag: string
@@ -14,6 +25,8 @@ export type ImportAssetRecord = {
   depreciation_value: string
   notes: string
   lifecycle_stage: LifecycleStage
+  /** HTTPS photo URL from spreadsheet — hydrated after asset insert, not stored as a field. */
+  photo_url?: string | null
 }
 
 export type ColumnMapping = {
@@ -42,6 +55,7 @@ const TARGET_FIELDS: Array<keyof ImportAssetRecord> = [
   'depreciation_value',
   'notes',
   'lifecycle_stage',
+  'photo_url',
 ]
 
 const SYSTEM_PROMPT = `You map spreadsheet columns to AssetGriffin asset import fields.
@@ -54,6 +68,7 @@ Return JSON only:
 }
 
 Valid targets: ${TARGET_FIELDS.join(', ')}
+Map "Asset Photo", "Photo URL", or similar image-link columns to photo_url when values are HTTPS URLs.
 Map only columns you are confident about. Use null when unsure.
 Do not invent data — mapping only.`
 
@@ -123,13 +138,56 @@ function splitCsvRecords(text: string): string[] {
   return records
 }
 
-export function parseCsv(text: string): { headers: string[]; rows: string[][] } {
+export function parseCsv(text: string): SpreadsheetTable {
   const lines = splitCsvRecords(text)
   if (lines.length === 0) return { headers: [], rows: [] }
 
   const headers = parseCsvLine(lines[0])
   const rows = lines.slice(1).map(parseCsvLine).filter((row) => row.some((cell) => cell.trim()))
   return { headers, rows }
+}
+
+function cellToString(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).trim()
+}
+
+function parseExcel(buffer: ArrayBuffer): SpreadsheetTable {
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+  const sheetName = workbook.SheetNames[0]
+  if (!sheetName) return { headers: [], rows: [] }
+
+  const sheet = workbook.Sheets[sheetName]
+  const matrix = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: true,
+    defval: '',
+  }) as unknown[][]
+
+  if (!matrix.length) return { headers: [], rows: [] }
+
+  const headers = (matrix[0] ?? []).map(cellToString)
+  const rows = matrix
+    .slice(1)
+    .map((row) => headers.map((_, index) => cellToString(row[index])))
+    .filter((row) => row.some((cell) => cell.trim()))
+
+  return { headers, rows }
+}
+
+export function parseSpreadsheetUpload(buffer: ArrayBuffer, fileName: string): SpreadsheetTable {
+  const lower = fileName.toLowerCase()
+
+  if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+    return parseExcel(buffer)
+  }
+
+  if (lower.endsWith('.csv') || lower.endsWith('.txt')) {
+    return parseCsv(new TextDecoder().decode(buffer))
+  }
+
+  throw new Error('Upload a CSV or Excel file (.csv, .xlsx, .xls).')
 }
 
 function normalizeStatus(value: string): AssetStatus {
@@ -212,8 +270,9 @@ function applyMappings(
 
       const statusRaw = valueFor('status', row)
       const lifecycleRaw = valueFor('lifecycle_stage', row)
+      const photoUrl = normalizeImportPhotoUrl(valueFor('photo_url', row))
 
-      return {
+      const record: ImportAssetRecord = {
         asset_tag: assetTag || `IMPORT-${crypto.randomUUID().slice(0, 8)}`,
         name,
         category: valueFor('category', row) || 'Equipment',
@@ -226,13 +285,18 @@ function applyMappings(
         depreciation_value: valueFor('depreciation_value', row) || '$0',
         notes: valueFor('notes', row),
         lifecycle_stage: lifecycleRaw ? normalizeLifecycle(lifecycleRaw) : 'Procurement',
-      } satisfies ImportAssetRecord
+        ...(photoUrl ? { photo_url: photoUrl } : {}),
+      }
+
+      return record
     })
     .filter((record): record is ImportAssetRecord => record !== null)
 }
 
-export async function extractAssetsFromSpreadsheet(csvText: string): Promise<GriffinImportExtraction> {
-  const { headers, rows } = parseCsv(csvText)
+export async function extractAssetsFromSpreadsheet(
+  input: string | SpreadsheetTable,
+): Promise<GriffinImportExtraction> {
+  const { headers, rows } = typeof input === 'string' ? parseCsv(input) : input
   if (!headers.length || !rows.length) {
     throw new Error('The uploaded file did not contain any importable rows.')
   }
@@ -272,7 +336,19 @@ Sample rows: ${JSON.stringify(sampleRows)}`,
   }
 
   const columnMappings = Array.isArray(parsed.columnMappings) ? parsed.columnMappings : []
+  const photoHeader = detectPhotoUrlColumn(headers, rows.slice(0, 12))
+  if (photoHeader && !columnMappings.some((mapping) => mapping.target === 'photo_url')) {
+    columnMappings.push({ source: photoHeader, target: 'photo_url' })
+  }
+
   const records = applyMappings(headers, rows, columnMappings)
+  const photoUrlCount = records.filter((record) => record.photo_url).length
+  const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : []
+  if (photoUrlCount > 0) {
+    warnings.push(
+      `${photoUrlCount} record${photoUrlCount === 1 ? '' : 's'} include a photo URL — images will be downloaded during import.`,
+    )
+  }
 
   return {
     summary:
@@ -280,7 +356,7 @@ Sample rows: ${JSON.stringify(sampleRows)}`,
       `GriffinEye mapped ${columnMappings.filter((m) => m.target).length} columns and prepared ${records.length} records for review.`,
     columnMappings,
     records,
-    warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
+    warnings,
     rowCount: rows.length,
   }
 }

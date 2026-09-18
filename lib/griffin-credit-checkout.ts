@@ -81,6 +81,10 @@ export async function createCreditPackCheckoutSession({
     customerId = refreshedOrg?.stripe_customer_id ?? customerId
   }
 
+  if (!customerId) {
+    throw new Error('Stripe customer is not configured for this workspace.')
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     customer: customerId,

@@ -86,7 +86,8 @@ begin
   select subscription_tier, griffin_vision_credits_balance
   into v_tier, v_credits
   from public.organizations
-  where id = p_organization_id;
+  where id = p_organization_id
+  for update;
 
   if not found then
     raise exception 'Organization not found';

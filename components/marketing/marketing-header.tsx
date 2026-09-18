@@ -45,7 +45,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { compareTargets } from '@/lib/compare-data'
+import { compareCardSubtitles, compareTargets } from '@/lib/compare-data'
 
 interface NavItem {
   label: string
@@ -279,21 +279,12 @@ const industriesColumns: NavColumn[] = [
   },
 ]
 
-const compareDescriptions: Record<string, string> = {
-  assettiger: 'Free tier limits and search at scale',
-  'asset-panda': 'Pricing model and integration depth',
-  ezofficeinventory: 'Setup complexity and mobile experience',
-  reftab: 'Feature depth beyond IT assets',
-  'snipe-it': 'Hosted vs. self-managed tradeoffs',
-  sortly: 'Search performance at scale',
-}
-
 const compareColumn: NavColumn = {
   title: 'Compare',
   items: compareTargets.map((target) => ({
     label: target.navLabel,
     href: `/compare/${target.slug}`,
-    description: compareDescriptions[target.slug] ?? 'See how we compare',
+    description: compareCardSubtitles[target.slug] ?? 'See how we compare',
     icon: ArrowLeftRight,
   })),
 }

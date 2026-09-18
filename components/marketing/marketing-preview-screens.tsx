@@ -147,9 +147,25 @@ export function MarketingReportsPreview() {
 }
 
 export function MarketingAuditLogPreview() {
-  return <SettingsSection section="Audit log" onAnnounce={noop} />
+  return (
+    <SettingsSection
+      section="Audit log"
+      onAnnounce={noop}
+      userName="Alex Morgan"
+      userEmail="alex@acme.com"
+      userInitials="AM"
+    />
+  )
 }
 
 export function MarketingRolesPreview() {
-  return <SettingsSection section="Roles & permissions" onAnnounce={noop} />
+  return (
+    <SettingsSection
+      section="Roles & permissions"
+      onAnnounce={noop}
+      userName="Alex Morgan"
+      userEmail="alex@acme.com"
+      userInitials="AM"
+    />
+  )
 }

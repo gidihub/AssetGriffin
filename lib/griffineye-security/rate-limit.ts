@@ -1,6 +1,11 @@
 /** Per-user requests-per-minute cap on GriffinEye endpoints (independent of monthly credits). */
 
-export const GRIFFINEYE_RATE_LIMIT_RPM = Number(process.env.GRIFFINEYE_RATE_LIMIT_RPM ?? 20)
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+export const GRIFFINEYE_RATE_LIMIT_RPM = parsePositiveInt(process.env.GRIFFINEYE_RATE_LIMIT_RPM, 20)
 const WINDOW_MS = 60_000
 
 type Bucket = { timestamps: number[] }

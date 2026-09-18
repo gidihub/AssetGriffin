@@ -1,5 +1,7 @@
+import { applySpecFieldsToRecordData, parseSpecDump } from '@/lib/asset-spec-normalization'
 import type { AssetIntakeDraft } from '@/lib/griffineye-intake'
 import type { ImportAssetRecord } from '@/lib/griffineye-import'
+import type { ImportPeopleRecord } from '@/lib/griffineye-people-import'
 import { normalizeDateValue } from '@/lib/records-parity'
 import type { DbRecord } from '@/lib/supabase/database.types'
 import type { AssetRecord, LifecycleStage } from '@/lib/workspace-data'
@@ -24,11 +26,30 @@ function formatDisplayDate(iso: string | null | undefined): string {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export function importRecordToAssetData(record: ImportAssetRecord): Record<string, unknown> {
+export function importRecordToPeopleData(record: ImportPeopleRecord): Record<string, unknown> {
   return {
+    name: record.name.trim(),
+    team: record.team.trim(),
+    role: record.role.trim(),
+    department: record.department.trim(),
+    email: record.email.trim(),
+    phone: record.phone.trim(),
+    status: record.status || 'Active',
+    last_check_out: record.last_check_out ?? null,
+    employee_id: record.employee_id.trim(),
+    title: record.title.trim(),
+    site: record.site.trim(),
+    location: record.location.trim(),
+    notes: record.notes.trim(),
+  }
+}
+
+export function importRecordToAssetData(record: ImportAssetRecord): Record<string, unknown> {
+  const spec = parseSpecDump(record.name)
+  const base: Record<string, unknown> = {
     asset_tag: record.asset_tag,
-    name: record.name,
-    category: record.category || 'Equipment',
+    name: spec.wasSpecDump ? spec.name : record.name,
+    category: spec.categoryHint || record.category || 'Equipment',
     assigned_to: record.assigned_to || 'Unassigned',
     location: record.location ?? '',
     status: record.status || 'Available',
@@ -40,12 +61,13 @@ export function importRecordToAssetData(record: ImportAssetRecord): Record<strin
     notes: record.notes ?? '',
     lifecycle_stage: record.lifecycle_stage || 'Procurement',
     lifecycle_dates: record.purchase_date ? { Procurement: record.purchase_date } : {},
-    it_details: null,
   }
+  return applySpecFieldsToRecordData(base, spec)
 }
 
 export function intakeDraftToRecordData(draft: AssetIntakeDraft): Record<string, unknown> {
   const name =
+    draft.cleanName?.trim() ||
     [draft.manufacturer, draft.model].filter(Boolean).join(' ') ||
     draft.summary ||
     'Untitled asset'
@@ -62,10 +84,11 @@ export function intakeDraftToRecordData(draft: AssetIntakeDraft): Record<string,
 
   const noteParts = [draft.notes, draft.conditionNotes, identifierParts.join(' · ')].filter(Boolean)
 
-  return {
+  const categoryFromDraft = draft.categoryHint || intakeCategoryMap[draft.category] || 'Equipment'
+  const base: Record<string, unknown> = {
     asset_tag: assetTag,
-    name,
-    category: intakeCategoryMap[draft.category] ?? 'Equipment',
+    name: draft.cleanName || name,
+    category: categoryFromDraft,
     assigned_to: draft.assignedTo?.trim() || 'Unassigned',
     location: draft.location?.trim() ?? '',
     status: 'Available',
@@ -77,8 +100,26 @@ export function intakeDraftToRecordData(draft: AssetIntakeDraft): Record<string,
     notes: noteParts.join(' ') || 'Created via GriffinEye intake — reviewed by user.',
     lifecycle_stage: 'Procurement',
     lifecycle_dates: {},
-    it_details: null,
   }
+
+  if (draft.brand) base.brand = draft.brand
+  if (draft.device_type) base.device_type = draft.device_type
+  if (draft.modelField) base.model = draft.modelField
+  if (draft.operating_system) base.operating_system = draft.operating_system
+  if (draft.processor) base.processor = draft.processor
+  if (draft.ram) base.ram = draft.ram
+  if (draft.storage) base.storage = draft.storage
+  if (draft.color) base.color = draft.color
+  if (draft.mdm_enrollment_status) base.mdm_enrollment_status = draft.mdm_enrollment_status
+  if (draft.security_monitoring_software?.length) {
+    base.security_monitoring_software = { tags: draft.security_monitoring_software }
+  }
+
+  if (draft.specDumpOriginalName && !draft.brand && !draft.device_type) {
+    return applySpecFieldsToRecordData(base, parseSpecDump(draft.specDumpOriginalName))
+  }
+
+  return base
 }
 
 export function dbRecordToAssetRecord(record: DbRecord): AssetRecord {
@@ -120,21 +161,31 @@ export type WorkspaceRecordRow = {
   updatedAt: string
 }
 
+/** Normalize asset/record refs for deep-link matching (trim, coerce numeric JSON). */
+export function normalizeRecordRef(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'string') return value.trim()
+  return String(value).trim()
+}
+
+function recordRefCandidates(row: WorkspaceRecordRow): string[] {
+  const refs = [row.id, row.data.asset_tag, row.data.asset_id]
+    .map(normalizeRecordRef)
+    .filter(Boolean)
+  return [...new Set(refs)]
+}
+
 /** Match a workspace row by record UUID or asset tag (display id). */
 export function findRecordByRef(rows: WorkspaceRecordRow[], ref: string): WorkspaceRecordRow | undefined {
-  const needle = ref.trim()
+  const needle = normalizeRecordRef(ref)
   if (!needle) return undefined
-  return rows.find(
-    (row) =>
-      row.id === needle ||
-      String(row.data.asset_tag ?? '').trim() === needle ||
-      String(row.data.asset_id ?? '').trim() === needle,
-  )
+  return rows.find((row) => recordRefCandidates(row).some((candidate) => candidate === needle))
 }
 
 /** Best record ref for deep-linking (prefer human-readable asset tag). */
 export function recordOpenRef(row: WorkspaceRecordRow): string {
-  return String(row.data.asset_tag ?? row.id).trim() || row.id
+  return normalizeRecordRef(row.data.asset_tag) || row.id
 }
 
 /** Map onboarding template AssetRecord (display dates) into records.data jsonb. */

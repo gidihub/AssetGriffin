@@ -17,7 +17,7 @@ export type DbAiUsageLog = {
   id: string
   organization_id: string
   usage_type: 'griffin_vision_photo'
-  billing_source: 'tier_allowance' | 'purchased_credit'
+  billing_source: 'tier_allowance' | 'purchased_credit' | 'overage'
   created_at: string
 }
 

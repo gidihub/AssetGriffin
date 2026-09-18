@@ -26,6 +26,8 @@ declare
   v_actions_today bigint;
   v_estimated numeric;
   v_next_estimated numeric;
+  v_day_start timestamptz;
+  v_day_end timestamptz;
 begin
   if p_organization_id is null then
     return jsonb_build_object(
@@ -47,11 +49,15 @@ begin
     and g.spend_date = v_spend_date
   for update;
 
+  v_day_start := (v_spend_date::timestamp at time zone 'UTC');
+  v_day_end := ((v_spend_date + 1)::timestamp at time zone 'UTC');
+
   select count(*)
   into v_log_count
   from public.ai_usage_log l
   where l.organization_id = p_organization_id
-    and l.created_at >= v_spend_date::timestamptz;
+    and l.created_at >= v_day_start
+    and l.created_at < v_day_end;
 
   v_actions_today := greatest(v_log_count, v_reserved);
   v_estimated := v_actions_today * p_estimated_cost_usd;

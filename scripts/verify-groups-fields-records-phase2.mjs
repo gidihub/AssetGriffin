@@ -327,24 +327,28 @@ async function verifyAuthenticatedDataLayer() {
     createdGroupId = newGroup.id
     check(Boolean(createdGroupId), 'authenticated user can create a custom group')
 
-    const { data: insertedRecord, error: insertRecordError } = await client
-      .from('records')
-      .insert({
-        group_id: assetsGroup.id,
-        organization_id: orgId,
-        data: {
-          asset_tag: `P2-${suffix}`,
-          name: 'Phase 2 smoke asset',
-          category: 'Equipment',
-          status: 'Available',
-          lifecycle_stage: 'Procurement',
-        },
-      })
-      .select('id')
-      .single()
-    if (insertRecordError) throw new Error(insertRecordError.message)
-    createdRecordId = insertedRecord.id
-    check(Boolean(createdRecordId), 'authenticated user can insert a record into own org group')
+    if (!assetsGroup) {
+      check(false, 'authenticated user can insert a record into own org group')
+    } else {
+      const { data: insertedRecord, error: insertRecordError } = await client
+        .from('records')
+        .insert({
+          group_id: assetsGroup.id,
+          organization_id: orgId,
+          data: {
+            asset_tag: `P2-${suffix}`,
+            name: 'Phase 2 smoke asset',
+            category: 'Equipment',
+            status: 'Available',
+            lifecycle_stage: 'Procurement',
+          },
+        })
+        .select('id')
+        .single()
+      if (insertRecordError) throw new Error(insertRecordError.message)
+      createdRecordId = insertedRecord.id
+      check(Boolean(createdRecordId), 'authenticated user can insert a record into own org group')
+    }
 
     const { error: frozenInsertError } = await client.from('assets').insert({
       organization_id: orgId,

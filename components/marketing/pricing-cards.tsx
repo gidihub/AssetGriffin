@@ -44,7 +44,7 @@ const freeTier: StaticTier = {
   price: "$0",
   period: "forever",
   description: "Up to 250 assets, unlimited users",
-  features: ["Up to 250 assets", "Unlimited users", "Mobile scanning", "Basic reporting"],
+  features: ["Up to 250 assets", "Unlimited users", "GriffinEye scans: 50/month", "Mobile scanning", "Basic reporting"],
   cta: "Start free",
   highlighted: false,
 }
@@ -55,7 +55,7 @@ const enterpriseTier: StaticTier = {
   price: "Custom",
   period: "",
   description: "Unlimited assets, dedicated support",
-  features: ["Unlimited assets", "Unlimited users", "Dedicated support", "Custom onboarding", "SSO & advanced security"],
+  features: ["Unlimited assets", "Unlimited users", "GriffinEye scans: Unlimited", "Dedicated support", "Custom onboarding", "SSO & advanced security"],
   cta: "Contact sales",
   highlighted: false,
 }
@@ -71,14 +71,14 @@ const pppPlans: {
     key: "growth",
     name: "Growth",
     description: "Up to 2,500 assets, unlimited users",
-    features: ["Up to 2,500 assets", "Unlimited users", "Maintenance scheduling", "Inspection checklists", "Integrations"],
+    features: ["Up to 2,500 assets", "Unlimited users", "GriffinEye scans: 500/month", "Maintenance scheduling", "Inspection checklists", "Integrations"],
     highlighted: true,
   },
   {
     key: "scale",
     name: "Scale",
     description: "Up to 25,000 assets, unlimited users",
-    features: ["Up to 25,000 assets", "Unlimited users", "Full audit trail", "Scheduled reporting", "Priority support"],
+    features: ["Up to 25,000 assets", "Unlimited users", "GriffinEye scans: 2,500/month", "Full audit trail", "Scheduled reporting", "Priority support"],
     highlighted: false,
   },
 ]

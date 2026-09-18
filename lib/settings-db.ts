@@ -175,6 +175,16 @@ export async function loadWorkspaceSettings(): Promise<WorkspaceSettingsPayload>
   ])
 
   if (orgResult.error) throw new Error(orgResult.error.message)
+  if (teamResult.error) throw new Error(teamResult.error.message)
+  if (spendingResult.error) throw new Error(spendingResult.error.message)
+  if (rolesResult.error) throw new Error(rolesResult.error.message)
+  if (approvalResult.error) throw new Error(approvalResult.error.message)
+  if (departmentsResult.error) throw new Error(departmentsResult.error.message)
+  if (workflowsResult.error) throw new Error(workflowsResult.error.message)
+  if (integrationsResult.error) throw new Error(integrationsResult.error.message)
+  if (apiKeysResult.error) throw new Error(apiKeysResult.error.message)
+  if (webhooksResult.error) throw new Error(webhooksResult.error.message)
+  if (permissionsResult.error) throw new Error(permissionsResult.error.message)
 
   const preferencesRaw = profile.preferences
   const preferences = readUserPreferences(preferencesRaw)

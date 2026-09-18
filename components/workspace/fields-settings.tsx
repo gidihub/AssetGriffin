@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { FIELD_TYPES, type FieldType } from '@/lib/schema-types'
 import type { DbField, DbGroup } from '@/lib/supabase/database.types'
+import { FieldOptionsEditor } from './field-options-editor'
 import { EmptyState } from './primitives'
 
 type Announce = (message: string) => void
@@ -158,7 +159,7 @@ export function FieldsSettings({ onAnnounce }: { onAnnounce: Announce }) {
         <div className="settings-card-header">
           <div>
             <h2>Field configuration</h2>
-            <p>Add, edit, remove, and reorder fields for any group. Use JSON options for select/status choices.</p>
+            <p>Add, edit, remove, and reorder fields for any group. Choices and suggested values use visual lists — raw JSON only when needed.</p>
           </div>
           <div className="settings-header-actions">
             <select value={selectedSlug} onChange={(event) => setSelectedSlug(event.target.value)} aria-label="Select group">
@@ -172,6 +173,7 @@ export function FieldsSettings({ onAnnounce }: { onAnnounce: Announce }) {
           </div>
         </div>
 
+        <div className="settings-card-body">
         <div className="fields-editor">
           {fields.map((field, index) => (
             <div key={field.id ?? `${field.key}-${index}`} className="fields-editor-row">
@@ -185,7 +187,7 @@ export function FieldsSettings({ onAnnounce }: { onAnnounce: Announce }) {
                 value={field.key}
                 onChange={(event) => updateField(index, { key: event.target.value })}
                 placeholder="Key"
-                className="mono"
+                className="mono-muted"
                 aria-label={`Field ${index + 1} key`}
               />
               <select value={field.type} onChange={(event) => updateField(index, { type: event.target.value as FieldType })} aria-label={`Field ${index + 1} type`}>
@@ -193,11 +195,11 @@ export function FieldsSettings({ onAnnounce }: { onAnnounce: Announce }) {
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
-              <input
-                value={field.optionsText}
-                onChange={(event) => updateField(index, { optionsText: event.target.value })}
-                placeholder='Options JSON e.g. {"choices":["A","B"]}'
-                aria-label={`Field ${index + 1} options`}
+              <FieldOptionsEditor
+                fieldKey={field.key}
+                fieldType={field.type}
+                optionsText={field.optionsText}
+                onChange={(optionsText) => updateField(index, { optionsText })}
               />
               <label className="fields-required-toggle">
                 <input type="checkbox" checked={field.required} onChange={(event) => updateField(index, { required: event.target.checked })} />
@@ -213,6 +215,7 @@ export function FieldsSettings({ onAnnounce }: { onAnnounce: Announce }) {
         <button type="button" className="button secondary small" onClick={addField}>
           <Plus size={14} /> Add field
         </button>
+        </div>
       </div>
     </div>
   )

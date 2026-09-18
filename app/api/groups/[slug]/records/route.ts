@@ -44,12 +44,7 @@ export async function POST(request: Request, context: RouteContext) {
       return Response.json({ error: 'Record data is required.' }, { status: 400 })
     }
 
-    const record = await createRecordForGroup(
-      group.id,
-      body.data as Record<string, unknown>,
-      profile.organization_id,
-      profile.id,
-    )
+    const record = await createRecordForGroup(group.id, body.data as Record<string, unknown>, profile.id)
 
     return Response.json({ record: dbRecordToRow(record) })
   } catch (error) {

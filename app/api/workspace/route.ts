@@ -8,7 +8,7 @@ export async function GET() {
 
     const { data: organization, error } = await supabase
       .from('organizations')
-      .select('name')
+      .select('name, primary_color, logo_url')
       .eq('id', profile.organization_id)
       .single()
 
@@ -23,6 +23,8 @@ export async function GET() {
       },
       organization: {
         name: organization?.name ?? 'Workspace',
+        primaryColor: organization?.primary_color ?? '#2FA391',
+        logoUrl: organization?.logo_url ?? null,
       },
     })
   } catch (error) {

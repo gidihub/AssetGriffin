@@ -46,10 +46,18 @@ import { saveIntakeAsset } from '@/lib/save-intake-asset'
 import type { DbField, DbGroup } from '@/lib/supabase/database.types'
 import type { AssetRecord } from '@/lib/workspace-data'
 import { findRecordByRef, recordOpenRef, type WorkspaceRecordRow } from '@/lib/record-mappers'
+import { scrollPageContentToTop } from '@/lib/scroll-page-content'
 import { getCachedGroupPage, setCachedGroupPage, invalidateGroupPage } from '@/lib/group-page-cache'
 import { AssetDetailView } from '@/components/workspace/asset-detail-view'
 import { RecordFormDrawer } from '@/components/workspace/record-form-drawer'
 import { RecordActionsPanel } from '@/components/workspace/record-actions-panel'
+import { ExportModal } from '@/components/workspace/export-modal'
+import { SpecBackfillModal } from '@/components/workspace/spec-backfill-modal'
+import {
+  downloadRecordExport,
+  generateRecordExport,
+  type RecordExportOptions,
+} from '@/lib/record-export'
 import type { DbActionType } from '@/lib/schema-types'
 
 type Announce = (message: string) => void
@@ -145,6 +153,7 @@ export function GroupPage({
   initialOpenRecordRef,
   onInitialOpenRecordHandled,
   onOpenRecordDetail,
+  listRefreshKey,
 }: {
   slug: string
   onAnnounce: Announce
@@ -160,8 +169,11 @@ export function GroupPage({
   onInitialOpenRecordHandled?: () => void
   /** Bubble record opens to parent (e.g. overview deep-link state). */
   onOpenRecordDetail?: (recordRef: string) => void
+  /** Bump after imports so cached group data is refetched. */
+  listRefreshKey?: number
 }) {
   const isAssets = slug === 'assets'
+  const isPeople = slug === 'people'
   const Icon = groupIcon('boxes')
 
   const [group, setGroup] = useState<DbGroup | null>(null)
@@ -181,6 +193,9 @@ export function GroupPage({
 
   const [showCapture, setShowCapture] = useState(false)
   const [captureMode, setCaptureMode] = useState<'choose' | 'scan' | 'photo'>('choose')
+  const [exportRecords, setExportRecords] = useState<WorkspaceRecordRow[] | null>(null)
+  const [showSpecBackfill, setShowSpecBackfill] = useState(false)
+  const [specBackfillCount, setSpecBackfillCount] = useState(0)
 
   const [griffinEyeSummary, setGriffinEyeSummary] = useState('')
   const [griffinEyeTags, setGriffinEyeTags] = useState<string[] | null>(null)
@@ -209,8 +224,13 @@ export function GroupPage({
     const row = findRecordByRef(rows, initialOpenRecordRef)
     if (!row) return
     setDetail(row)
+    scrollPageContentToTop()
     onInitialOpenRecordHandled?.()
   }, [initialOpenRecordRef, loading, rows, onInitialOpenRecordHandled])
+
+  useEffect(() => {
+    if (detail) scrollPageContentToTop()
+  }, [detail?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -271,7 +291,23 @@ export function GroupPage({
     return () => {
       cancelled = true
     }
-  }, [slug])
+  }, [slug, listRefreshKey])
+
+  useEffect(() => {
+    if (!isAssets || loading) return
+    let cancelled = false
+    void fetch('/api/groups/assets/spec-backfill')
+      .then((response) => response.json())
+      .then((payload: { count?: number }) => {
+        if (!cancelled) setSpecBackfillCount(payload.count ?? 0)
+      })
+      .catch(() => {
+        if (!cancelled) setSpecBackfillCount(0)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isAssets, loading, listRefreshKey, rows.length])
 
   function openCapture(mode: 'choose' | 'scan' | 'photo' = 'choose') {
     setCaptureMode(mode)
@@ -331,6 +367,22 @@ export function GroupPage({
     setGriffinEyeTags(null)
     setGriffinEyeTable(null)
     setGriffinEyeSummary('')
+  }
+
+  function openExportModal(records: WorkspaceRecordRow[]) {
+    if (!records.length) {
+      onAnnounce('No records to export.')
+      return
+    }
+    setExportRecords(records)
+  }
+
+  async function handleExport(options: RecordExportOptions) {
+    if (!exportRecords || !group) return
+    const { blob, filename } = await generateRecordExport(fields, exportRecords, slug, options)
+    downloadRecordExport(blob, filename)
+    const kind = options.includeFiles && filename.endsWith('.zip') ? 'ZIP' : options.format.toUpperCase()
+    onAnnounce(`Exported ${exportRecords.length} records as ${kind}.`)
   }
 
   useEffect(() => {
@@ -396,7 +448,10 @@ export function GroupPage({
     setStatusFilter((current) => (current === id ? '' : id))
   }
 
-  const drawerFields = fields.filter((f) => f.type !== 'json' || f.key === 'it_details')
+  const drawerFields = fields.filter((f) => {
+    if (f.key === 'it_details' && f.options?.deprecated) return false
+    return f.type !== 'json' || f.key === 'it_details' || f.key === 'security_monitoring_software'
+  })
 
   if (loading) {
     return (
@@ -451,13 +506,34 @@ export function GroupPage({
         description={description}
         addLabel={isAssets ? 'Add asset' : `Add ${group.name.toLowerCase().replace(/s$/, '')}`}
         onAdd={() => (isAssets ? openCapture('choose') : (setEditingRecord(null), setShowRecordForm(true)))}
-        onExport={() => onAnnounce(`Exported ${filtered.length} records.`)}
+        onExport={() => openExportModal(filtered)}
         extraActions={
           isAssets ? (
-            <button className="button secondary" onClick={() => openCapture('scan')}><QrCode size={16} /> Scan asset</button>
+            <>
+              {specBackfillCount > 0 ? (
+                <button className="button secondary" onClick={() => setShowSpecBackfill(true)}>
+                  Review {specBackfillCount} spec names
+                </button>
+              ) : null}
+              <button className="button secondary" onClick={() => openCapture('scan')}><QrCode size={16} /> Scan asset</button>
+            </>
+          ) : isPeople ? (
+            <button className="button secondary" onClick={() => onOpenSpreadsheetImport?.()}><ArrowDownToLine size={16} /> Import people</button>
           ) : undefined
         }
       />
+
+      {isAssets && specBackfillCount > 0 ? (
+        <div className="spec-backfill-banner panel">
+          <p>
+            <strong>{specBackfillCount} assets</strong> have specification-dump names that can be split into structured
+            fields. Review each proposed change before anything is saved.
+          </p>
+          <button type="button" className="button primary small" onClick={() => setShowSpecBackfill(true)}>
+            Open batch review
+          </button>
+        </div>
+      ) : null}
 
       {isAssets && (
         <span className="scan-info-line"><Smartphone size={14} /> Assets can be scanned from any phone camera — no dedicated mobile app required.</span>
@@ -509,7 +585,7 @@ export function GroupPage({
           count={selected.size}
           onClear={() => setSelected(new Set())}
           actions={[
-            { label: 'Export selected', onClick: () => onAnnounce(`Exported ${selected.size} records.`) },
+            { label: 'Export selected', onClick: () => openExportModal(rows.filter((row) => selected.has(row.id))) },
             { label: 'Reassign', onClick: () => onAnnounce(`Reassign flow opened for ${selected.size} records.`) },
           ]}
         />
@@ -634,6 +710,33 @@ export function GroupPage({
           onAnnounce={onAnnounce}
         />
       )}
+
+      {exportRecords && group && (
+        <ExportModal
+          summary={
+            <>
+              Export <strong>{exportRecords.length}</strong>{' '}
+              {exportRecords.length === 1 ? 'record' : 'records'} from <strong>{group.name}</strong>.
+            </>
+          }
+          includeFilesOption={isAssets}
+          onClose={() => setExportRecords(null)}
+          onExport={handleExport}
+        />
+      )}
+
+      {showSpecBackfill && isAssets ? (
+        <SpecBackfillModal
+          onClose={() => setShowSpecBackfill(false)}
+          onApplied={(updated) => {
+            setRows((current) => current.map((row) => (row.id === updated.id ? updated : row)))
+            if (detail?.id === updated.id) setDetail(updated)
+            invalidateGroupPage(slug)
+            setSpecBackfillCount((count) => Math.max(0, count - 1))
+          }}
+          onAnnounce={onAnnounce}
+        />
+      ) : null}
 
       {isAssets && showCapture && (
         <AssetCaptureModal

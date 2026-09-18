@@ -63,7 +63,9 @@ begin
     raise exception 'email cannot be changed';
   end if;
   if new.role is distinct from old.role then
-    raise exception 'role cannot be changed via direct update';
+    if current_setting('app.allow_profile_role_change', true) is distinct from 'true' then
+      raise exception 'role cannot be changed via direct update';
+    end if;
   end if;
   return new;
 end;
@@ -282,7 +284,9 @@ begin
     end if;
   end if;
 
+  perform set_config('app.allow_profile_role_change', 'true', true);
   update public.profiles set role = p_role where id = p_member_id returning * into target;
+  perform set_config('app.allow_profile_role_change', '', true);
   return target;
 end;
 $$;

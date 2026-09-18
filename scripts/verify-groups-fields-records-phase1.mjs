@@ -372,9 +372,22 @@ async function verifyRlsIsolation() {
 }
 
 async function cleanupOrphanTestRecords() {
+  const { data: testProfiles, error: profilesError } = await admin
+    .from('profiles')
+    .select('organization_id')
+    .or('email.like.gfr-a-%,email.like.gfr-b-%,email.like.gfr-phase1-%')
+  if (profilesError) {
+    console.warn(`cleanup orphan test records: profile lookup failed: ${profilesError.message}`)
+    return
+  }
+
+  const orgIds = [...new Set((testProfiles ?? []).map((row) => row.organization_id).filter(Boolean))]
+  if (!orgIds.length) return
+
   const { data, error } = await admin
     .from('records')
-    .select('id, data')
+    .select('id')
+    .in('organization_id', orgIds)
     .filter('data->>asset_tag', 'like', 'RLS-%')
   if (error) return
   const ids = (data ?? []).map((row) => row.id)

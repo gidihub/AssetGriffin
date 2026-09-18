@@ -47,7 +47,12 @@ export async function signup(formData: FormData) {
     redirect(loginPageUrl({ error: 'Password must be at least 6 characters', mode: 'signup' }))
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : undefined)
+  if (!siteUrl) {
+    redirect(loginPageUrl({ error: 'Site URL is not configured. Set NEXT_PUBLIC_SITE_URL.', mode: 'signup' }))
+  }
   const { data, error } = await supabase.auth.signUp({
     email,
     password,

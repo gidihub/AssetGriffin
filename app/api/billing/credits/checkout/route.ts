@@ -1,41 +1,22 @@
-import { createCreditPackCheckoutSession } from '@/lib/griffin-credit-checkout'
-import type { GriffinCreditPackKey } from '@/lib/griffin-credit-packs'
 import { requireUserProfile } from '@/lib/supabase/session'
 
 export const runtime = 'nodejs'
 
-function parsePackKey(value: unknown): GriffinCreditPackKey | null {
-  if (value === 'starter' || value === 'standard' || value === 'bulk') return value
-  return null
-}
-
-export async function POST(request: Request) {
+/** Credit packs were removed in favor of monthly allowance + $0.02/scan overage on paid tiers. */
+export async function POST() {
   try {
-    const { supabase, profile, user } = await requireUserProfile()
-    const body = (await request.json()) as { packKey?: unknown }
-    const packKey = parsePackKey(body.packKey)
-
-    if (!packKey) {
-      return Response.json({ error: 'Select a valid credit pack.' }, { status: 400 })
-    }
-
-    const checkout = await createCreditPackCheckoutSession({
-      supabase,
-      organizationId: profile.organization_id,
-      userEmail: profile.email || user.email || '',
-      packKey,
-    })
-
-    return Response.json(checkout)
+    await requireUserProfile()
+    return Response.json(
+      {
+        error:
+          'Scan packs are no longer sold. Paid plans include a monthly allowance with $0.02 per additional scan on your next invoice.',
+      },
+      { status: 410 },
+    )
   } catch (error) {
-    console.error('[billing/credits/checkout]', error)
-    const message = error instanceof Error ? error.message : 'Could not start checkout.'
+    const message = error instanceof Error ? error.message : 'Unauthorized'
     const status =
-      message === 'Unauthorized' || message === 'Profile not found for authenticated user'
-        ? 401
-        : message.includes('STRIPE_') || message.includes('is not configured')
-          ? 503
-          : 500
+      message === 'Unauthorized' || message === 'Profile not found for authenticated user' ? 401 : 500
     return Response.json({ error: message }, { status })
   }
 }

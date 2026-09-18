@@ -49,6 +49,9 @@ function stringArray(value: unknown): string[] | undefined {
 }
 
 function numberField(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined
+  if (typeof value === 'boolean' || Array.isArray(value)) return undefined
+  if (typeof value !== 'number' && typeof value !== 'string') return undefined
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
 }

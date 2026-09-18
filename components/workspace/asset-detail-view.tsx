@@ -35,7 +35,12 @@ import {
 } from '@/lib/asset-detail-data'
 import type { DbAuditLogRow } from '@/lib/griffineye-audit'
 import type { ActionEventRow } from '@/lib/actions-db'
-import { itCategories, lifecycleStageOrder } from '@/lib/workspace-data'
+import {
+  ASSET_SPEC_FIELD_KEYS,
+  isItSpecCategory,
+  parseSecurityMonitoringSoftware,
+} from '@/lib/asset-spec-fields'
+import { lifecycleStageOrder } from '@/lib/workspace-data'
 import {
   EmptyState,
   FieldGrid,
@@ -47,7 +52,9 @@ import {
 import { RecordActionsPanel } from './record-actions-panel'
 import { RecordFormDrawer } from './record-form-drawer'
 import {
+  assetDetailMetaParts,
   formatFieldValue,
+  formatOptionalValue,
   getPrimaryStatusField,
   recordDisplayLabel,
   recordDisplaySubtitle,
@@ -55,6 +62,10 @@ import {
 } from '@/lib/field-ui'
 import type { DbActionType, DbField } from '@/lib/schema-types'
 import type { WorkspaceRecordRow } from '@/lib/record-mappers'
+import { isSpecDumpName, parseSpecDump } from '@/lib/asset-spec-normalization'
+import type { AssetSpecFieldKey } from '@/lib/asset-spec-fields'
+import { mergeSpecReviewIntoRecordData, specReviewFromParsed, type SpecReviewFields } from '@/lib/asset-spec-review'
+import { SpecReviewPanel } from '@/components/workspace/spec-review-panel'
 
 type Announce = (message: string) => void
 
@@ -130,6 +141,9 @@ export function AssetDetailView({
   const [editingDetails, setEditingDetails] = useState(false)
   const [draftData, setDraftData] = useState<Record<string, unknown>>({})
   const [savingDetails, setSavingDetails] = useState(false)
+  const [specReview, setSpecReview] = useState<SpecReviewFields | null>(null)
+  const [specSuggested, setSpecSuggested] = useState<Set<AssetSpecFieldKey>>(new Set())
+  const [reviewedSpecName, setReviewedSpecName] = useState<string | null>(null)
 
   const statusField = useMemo(() => getPrimaryStatusField(fields), [fields])
   const identificationFields = useMemo(
@@ -140,23 +154,46 @@ export function AssetDetailView({
     () => fields.find((field) => field.key === 'lifecycle_stage'),
     [fields],
   )
+  const specificationFields = useMemo(
+    () =>
+      fields.filter((field) =>
+        (ASSET_SPEC_FIELD_KEYS as readonly string[]).includes(field.key),
+      ),
+    [fields],
+  )
   const recordDetailFields = useMemo(
     () =>
       fields.filter(
         (field) =>
           !IDENTIFICATION_KEYS.has(field.key) &&
           field.key !== 'lifecycle_stage' &&
-          field.type !== 'json',
+          field.type !== 'json' &&
+          !(ASSET_SPEC_FIELD_KEYS as readonly string[]).includes(field.key),
       ),
     [fields],
   )
   const itDetailsField = useMemo(() => fields.find((field) => field.key === 'it_details'), [fields])
   const detailsData = editingDetails ? draftData : localRecord.data
-  const showItDetails =
+  const hasSpecValues = useMemo(
+    () =>
+      specificationFields.some((field) => {
+        const value = localRecord.data[field.key]
+        if (field.key === 'security_monitoring_software') {
+          return parseSecurityMonitoringSoftware(value).tags.length > 0
+        }
+        return value !== null && value !== undefined && String(value).trim() !== ''
+      }),
+    [localRecord.data, specificationFields],
+  )
+  const showSpecifications =
+    specificationFields.length > 0 &&
+    (editingDetails || hasSpecValues || isItSpecCategory(localRecord.data.category))
+  const showLegacyItDetails =
     Boolean(itDetailsField) &&
-    (editingDetails ||
-      (typeof localRecord.data.it_details === 'object' && localRecord.data.it_details !== null) ||
-      itCategories.includes(String(localRecord.data.category ?? '')))
+    !itDetailsField?.options?.deprecated &&
+    typeof localRecord.data.it_details === 'object' &&
+    localRecord.data.it_details !== null &&
+    Object.keys(localRecord.data.it_details as Record<string, unknown>).length > 0
   const headerPhoto = primaryPhoto(photos)
   const assetRef = assetDisplayRef(localRecord)
 
@@ -184,31 +221,18 @@ export function AssetDetailView({
 
   function startEditingDetails() {
     setDraftData({ ...localRecord.data })
+    setSpecReview(null)
+    setSpecSuggested(new Set())
+    setReviewedSpecName(null)
     setEditingDetails(true)
   }
 
   function cancelEditingDetails() {
     setDraftData({ ...localRecord.data })
+    setSpecReview(null)
+    setSpecSuggested(new Set())
+    setReviewedSpecName(null)
     setEditingDetails(false)
-  }
-
-  async function saveDetails() {
-    setSavingDetails(true)
-    try {
-      const saved = await persistRecordData({
-        ...draftData,
-        asset_photos: localRecord.data.asset_photos ?? draftData.asset_photos,
-        warranty_records: localRecord.data.warranty_records ?? draftData.warranty_records,
-      })
-      if (saved) {
-        setEditingDetails(false)
-        onAnnounce('Asset details updated.')
-      }
-    } catch (error) {
-      onAnnounce(error instanceof Error ? error.message : 'Could not save asset details.')
-    } finally {
-      setSavingDetails(false)
-    }
   }
 
   const persistRecordData = useCallback(
@@ -228,6 +252,65 @@ export function AssetDetailView({
     },
     [localRecord.id, onUpdated],
   )
+
+  async function persistDraftDetails(nextData: Record<string, unknown>) {
+    const pendingReview = specReview
+    setSavingDetails(true)
+    try {
+      const saved = await persistRecordData({
+        ...nextData,
+        asset_photos: localRecord.data.asset_photos ?? nextData.asset_photos,
+        warranty_records: localRecord.data.warranty_records ?? nextData.warranty_records,
+      })
+      if (saved) {
+        if (pendingReview) {
+          setReviewedSpecName(pendingReview.originalName.trim())
+        }
+        setEditingDetails(false)
+        setSpecReview(null)
+        setSpecSuggested(new Set())
+        onAnnounce('Asset details updated.')
+      }
+    } catch (error) {
+      onAnnounce(error instanceof Error ? error.message : 'Could not save asset details.')
+    } finally {
+      setSavingDetails(false)
+    }
+  }
+
+  async function saveDetails() {
+    const newName = String(draftData.name ?? '').trim()
+    if (isSpecDumpName(newName) && reviewedSpecName !== newName && !specReview) {
+      const parsed = parseSpecDump(newName)
+      if (parsed.wasSpecDump) {
+        setSpecReview(specReviewFromParsed(parsed))
+        setSpecSuggested(new Set(parsed.suggestedFields))
+        onAnnounce('Review the suggested specification split before saving.')
+        return
+      }
+    }
+
+    if (specReview) {
+      onAnnounce('Apply or dismiss the specification review before saving.')
+      return
+    }
+
+    await persistDraftDetails(draftData)
+  }
+
+  async function applySpecReviewAndSave(keepOriginalName = false) {
+    if (!specReview) return
+    const merged = mergeSpecReviewIntoRecordData(
+      {
+        ...draftData,
+        asset_photos: localRecord.data.asset_photos ?? draftData.asset_photos,
+        warranty_records: localRecord.data.warranty_records ?? draftData.warranty_records,
+      },
+      specReview,
+      { keepOriginalName },
+    )
+    await persistDraftDetails(merged)
+  }
 
   const savePhotos = useCallback(
     async (nextPhotos: AssetPhoto[]) => {
@@ -451,11 +534,14 @@ export function AssetDetailView({
               {recordDisplaySubtitle(fields, localRecord.data, localRecord.id)}
             </p>
             <div className="asset-detail-id-row">
-              <span className="mono">{String(localRecord.data.asset_tag ?? localRecord.id)}</span>
-              <span className="asset-detail-id-sep">·</span>
-              <span className="mono">Serial {String(localRecord.data.serial ?? '—')}</span>
-              <span className="asset-detail-id-sep">·</span>
-              <span>{String(localRecord.data.category ?? '—')}</span>
+              {assetDetailMetaParts(localRecord.data, localRecord.id).map((part, index) => (
+                <span key={`${part.kind}-${index}`}>
+                  {index > 0 ? <span className="asset-detail-id-sep">·</span> : null}
+                  <span className={part.kind === 'tag' || part.kind === 'serial' ? 'mono-muted' : undefined}>
+                    {part.text}
+                  </span>
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -500,8 +586,8 @@ export function AssetDetailView({
                     </div>
                   ) : (
                     <>
-                      <div className="field-item"><span>Asset ID</span><strong className="mono">{String(localRecord.data.asset_tag ?? localRecord.id)}</strong></div>
-                      <div className="field-item"><span>Serial number</span><strong className="mono">{String(localRecord.data.serial ?? '—')}</strong></div>
+                      <div className="field-item"><span>Asset ID</span><strong className="mono-muted">{String(localRecord.data.asset_tag ?? localRecord.id)}</strong></div>
+                      <div className="field-item"><span>Serial number</span><strong className="mono-muted">{formatOptionalValue(localRecord.data.serial)}</strong></div>
                     </>
                   )}
                 </div>
@@ -560,20 +646,89 @@ export function AssetDetailView({
               )}
             </section>
 
-            {showItDetails && itDetailsField ? (
+            {editingDetails && specReview ? (
               <section className="drawer-section">
-                <h3>IT details</h3>
+                <SpecReviewPanel
+                  review={specReview}
+                  suggestedFields={specSuggested}
+                  onChange={setSpecReview}
+                />
+                <div className="asset-detail-edit-actions" style={{ marginTop: 16 }}>
+                  <button
+                    type="button"
+                    className="button primary small"
+                    disabled={savingDetails}
+                    onClick={() => void applySpecReviewAndSave(false)}
+                  >
+                    Apply split &amp; save
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary small"
+                    disabled={savingDetails}
+                    onClick={() => void applySpecReviewAndSave(true)}
+                  >
+                    Keep original name
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary small"
+                    disabled={savingDetails}
+                    onClick={() => setSpecReview(null)}
+                  >
+                    Dismiss review
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {showSpecifications ? (
+              <section className="drawer-section">
+                <h3>Specifications</h3>
+                {editingDetails ? (
+                  <div className="field-grid">
+                    {specificationFields.map((field) => (
+                      <label key={field.id} className="editable-field-item">
+                        <span>{field.label}</span>
+                        <RecordFieldInput field={field} data={draftData} onChange={setDraftData} />
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <FieldGrid
+                    fields={specificationFields.map((field) => ({
+                      label: field.label,
+                      value:
+                        field.key === 'security_monitoring_software' ? (
+                          <span className="security-tags-list">
+                            {parseSecurityMonitoringSoftware(localRecord.data[field.key]).tags.map((tag) => (
+                              <span key={tag} className="tag-pill security-tag-pill">
+                                {tag}
+                              </span>
+                            ))}
+                            {!parseSecurityMonitoringSoftware(localRecord.data[field.key]).tags.length ? '—' : null}
+                          </span>
+                        ) : (
+                          renderFieldValue(field, localRecord.data[field.key])
+                        ),
+                    }))}
+                  />
+                )}
+              </section>
+            ) : null}
+
+            {showLegacyItDetails && itDetailsField ? (
+              <section className="drawer-section">
+                <h3>IT details (legacy)</h3>
                 {editingDetails ? (
                   <RecordFieldInput field={itDetailsField} data={draftData} onChange={setDraftData} />
-                ) : typeof localRecord.data.it_details === 'object' && localRecord.data.it_details !== null ? (
+                ) : (
                   <FieldGrid
                     fields={Object.entries(localRecord.data.it_details as Record<string, unknown>).map(([key, value]) => ({
                       label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
                       value: Array.isArray(value) ? value.join(', ') : String(value ?? '—'),
                     }))}
                   />
-                ) : (
-                  <p className="asset-detail-empty-note">No IT metadata recorded yet.</p>
                 )}
               </section>
             ) : null}

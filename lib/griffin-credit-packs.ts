@@ -1,3 +1,4 @@
+/** @deprecated Scan packs removed — monthly allowance + $0.02/scan overage on paid tiers. Kept for legacy webhook fulfillment. */
 export type GriffinCreditPackKey = 'starter' | 'standard' | 'bulk'
 
 export type GriffinCreditPack = {

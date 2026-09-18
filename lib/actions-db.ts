@@ -1,6 +1,7 @@
+import { sanitizeRecordData } from '@/lib/field-value-validation'
 import { recordAuditEvent } from '@/lib/griffineye-audit'
-import { getGroupBySlug } from '@/lib/groups-db'
-import type { DbActionEvent, DbActionType } from '@/lib/schema-types'
+import { getGroupBySlug, listFieldsForGroup } from '@/lib/groups-db'
+import type { DbActionEvent, DbActionType, DbRecord } from '@/lib/schema-types'
 import { requireUserProfile } from '@/lib/supabase/session'
 
 export type ChecklistItemConfig = {
@@ -64,7 +65,28 @@ export async function listActionEventsForRecord(recordId: string, limit = 20): P
 
   if (error) throw new Error(error.message)
 
-  return (data ?? []).map((row) => {
+  const rows = data ?? []
+  const performerIds = [
+    ...new Set(
+      rows
+        .map((row) => (row as { performed_by: string | null }).performed_by)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  const performerLabels = new Map<string, string>()
+  if (performerIds.length) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', performerIds)
+    if (profilesError) throw new Error(profilesError.message)
+    for (const profile of profiles ?? []) {
+      const label = profile.full_name?.trim() || profile.email?.trim() || null
+      if (label) performerLabels.set(profile.id, label)
+    }
+  }
+
+  return rows.map((row) => {
     const joined = row as unknown as {
       id: string
       action_type_id: string
@@ -78,7 +100,7 @@ export async function listActionEventsForRecord(recordId: string, limit = 20): P
       actionTypeId: joined.action_type_id,
       actionName: joined.action_types?.name ?? 'Action',
       performedAt: joined.performed_at,
-      performedBy: joined.performed_by,
+      performedBy: joined.performed_by ? performerLabels.get(joined.performed_by) ?? null : null,
       data: joined.data ?? {},
     }
   })
@@ -117,10 +139,15 @@ function applyActionToRecordData(
     const requiredFailed = config.checklist_items.some(
       (item) => item.required && !values[item.id],
     )
-    if (!requiredFailed && config.pass_status) {
-      const today = new Date().toISOString().slice(0, 10)
-      if ('last_completed' in next) {
-        next.last_completed = today
+    if (actionType.change_field) {
+      if (!requiredFailed && config.pass_status) {
+        next[actionType.change_field] = config.pass_status
+        const today = new Date().toISOString().slice(0, 10)
+        if ('last_completed' in next) {
+          next.last_completed = today
+        }
+      } else if (requiredFailed && config.fail_status) {
+        next[actionType.change_field] = config.fail_status
       }
     }
   } else if (config.due_date_field && values[config.due_date_field]) {
@@ -166,32 +193,19 @@ export async function performRecordAction(input: PerformActionInput) {
   if (recordError) throw new Error(recordError.message)
   if (!record) throw new Error('Record not found.')
 
-  const { data: fieldRows, error: fieldsError } = await supabase
-    .from('fields')
-    .select('key')
-    .eq('group_id', group.id)
-
-  if (fieldsError) throw new Error(fieldsError.message)
-
-  const groupFieldKeys = new Set((fieldRows ?? []).map((field) => String(field.key)))
+  const fields = await listFieldsForGroup(group.id)
+  const groupFieldKeys = new Set(fields.map((field) => field.key))
   const values = input.values ?? {}
   const previousData = (record.data ?? {}) as Record<string, unknown>
-  const nextData = applyActionToRecordData(
-    actionType as DbActionType,
-    previousData,
-    values,
-    groupFieldKeys,
-  )
-
-  const { data: updated, error: updateError } = await supabase
-    .from('records')
-    .update({ data: nextData })
-    .eq('id', input.recordId)
-    .eq('group_id', group.id)
-    .select('*')
-    .single()
-
-  if (updateError) throw new Error(updateError.message)
+  const nextData = sanitizeRecordData(
+    applyActionToRecordData(
+      actionType as DbActionType,
+      previousData,
+      values,
+      groupFieldKeys,
+    ),
+    fields,
+  ).data
 
   const eventPayload = {
     values,
@@ -200,19 +214,23 @@ export async function performRecordAction(input: PerformActionInput) {
     next: nextData,
   }
 
-  const { data: event, error: eventError } = await supabase
-    .from('action_events')
-    .insert({
-      organization_id: profile.organization_id,
-      record_id: input.recordId,
-      action_type_id: input.actionTypeId,
-      performed_by: profile.id,
-      data: eventPayload,
-    })
-    .select('id, performed_at')
-    .single()
+  const { data: atomicResult, error: atomicError } = await supabase.rpc('perform_record_action_atomic', {
+    p_group_id: group.id,
+    p_record_id: input.recordId,
+    p_action_type_id: input.actionTypeId,
+    p_next_data: nextData,
+    p_event_data: eventPayload,
+  })
 
-  if (eventError) throw new Error(eventError.message)
+  if (atomicError) throw new Error(atomicError.message)
+
+  const payload = (atomicResult ?? {}) as {
+    record?: Record<string, unknown>
+    event?: { id: string; performed_at: string }
+  }
+  const updated = payload.record as DbRecord | undefined
+  const event = payload.event
+  if (!updated || !event) throw new Error('Action could not be saved.')
 
   const actorLabel = profile.full_name?.trim() || profile.email || 'Workspace member'
   const recordLabel = String(nextData.name ?? nextData.asset_tag ?? input.recordId)

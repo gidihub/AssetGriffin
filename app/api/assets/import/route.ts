@@ -1,4 +1,4 @@
-import { importAssetsForCurrentOrg } from '@/lib/assets-db'
+import { importAssetsWithPhotosForCurrentOrg } from '@/lib/assets-db'
 import type { ImportAssetRecord } from '@/lib/griffineye-import'
 import { recordAuditEvents } from '@/lib/griffineye-audit'
 import { requireUserProfile } from '@/lib/supabase/session'
@@ -26,12 +26,16 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Import batches are limited to 2,000 records.' }, { status: 400 })
     }
 
-    const inserted = await importAssetsForCurrentOrg(records)
+    const { assets: inserted, photos } = await importAssetsWithPhotosForCurrentOrg(records)
 
     // One event per imported asset, so "what changed via import?" can name the
     // records rather than only the batch. A batch summary event fronts them.
     const actorLabel = profile.full_name || profile.email
     const assetLabel = inserted.length === 1 ? 'asset' : 'assets'
+    const photoSummary =
+      photos.attached > 0
+        ? ` Attached ${photos.attached} photo${photos.attached === 1 ? '' : 's'}.`
+        : ''
 
     await recordAuditEvents(supabase, profile.organization_id, [
       {
@@ -42,8 +46,12 @@ export async function POST(request: Request) {
         actorLabel,
         entityType: 'Import batch',
         entityLabel: `${inserted.length} ${assetLabel}`,
-        summary: `Imported ${inserted.length} ${assetLabel} from a spreadsheet.`,
-        metadata: { imported: inserted.length },
+        summary: `Imported ${inserted.length} ${assetLabel} from a spreadsheet.${photoSummary}`,
+        metadata: {
+          imported: inserted.length,
+          photosAttached: photos.attached,
+          photosFailed: photos.failed.length,
+        },
       },
       ...inserted.map((asset) => ({
         category: 'import' as const,
@@ -62,6 +70,7 @@ export async function POST(request: Request) {
     return Response.json({
       imported: inserted.length,
       assets: inserted,
+      photos,
     })
   } catch (error) {
     console.error('[assets/import]', error)

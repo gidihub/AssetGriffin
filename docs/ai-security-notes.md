@@ -8,7 +8,7 @@ Internal reference for GriffinEye's defense-in-depth posture. Updated alongside 
 |--------|------------------|-------------------|
 | Org isolation (RLS) | Supabase RLS on `records`, `audit_log`, `groups`, etc. | Explicit `organization_id` filter on every records query via server `ToolContext` |
 | Org id in tool args | Tools never exposed `organization_id` in OpenAI schemas | `sanitizeToolArguments()` strips scope keys if model injects them |
-| Monthly usage caps | `reserve_griffineye_usage`, tier caps, purchased credits | Unchanged — still primary billing gate |
+| Monthly usage caps | `reserve_griffineye_usage`, tier allowances, overage on paid tiers | Free hard block; paid soft cap + $0.02/scan overage; abuse ceiling |
 | Credit reservation | Reserve before LLM, release on failure | Unchanged |
 | Review before save | Intake modal + API only writes on user Save | Trust banner when AI suggestions remain unedited |
 | Agent loop bound | `MAX_TOOL_ROUNDS = 4` | **3 rounds**, **15 tool calls/query**, **8s tool timeout** |
@@ -27,7 +27,7 @@ Internal reference for GriffinEye's defense-in-depth posture. Updated alongside 
 |-----------|--------------------------|-----------|
 | Per-user rate limiter (in-memory) | **Fail open** — request allowed | Avoid blocking paying users if the limiter throws; low blast radius vs spend |
 | Daily spend breaker (DB count) | **Fail closed** — request blocked | Unbounded LLM cost is the greater risk |
-| Monthly credit / tier cap | **Fail closed** (existing RPC) | Primary product entitlement |
+| Monthly scan allowance / abuse cap | **Fail closed** (existing RPC) | Primary product entitlement |
 | Supabase RLS | **Fail closed** (Postgres denies) | Data isolation |
 
 Rate limiting is **per server instance** today — not shared across horizontal scale. See known gaps.

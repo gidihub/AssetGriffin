@@ -1,5 +1,11 @@
 'use client'
 
+import { useState } from 'react'
+import {
+  MDM_ENROLLMENT_CHOICES,
+  parseSecurityMonitoringSoftware,
+  SECURITY_SOFTWARE_SUGGESTIONS,
+} from '@/lib/asset-spec-fields'
 import { fieldChoices } from '@/lib/field-ui'
 import { normalizeDateValue } from '@/lib/records-parity'
 import { lifecycleStageOrder } from '@/lib/workspace-data'
@@ -55,6 +61,76 @@ export function LifecycleDatesEditor({
   )
 }
 
+export function SecurityMonitoringEditor({
+  data,
+  onChange,
+}: {
+  data: Record<string, unknown>
+  onChange: (next: Record<string, unknown>) => void
+}) {
+  const parsed = parseSecurityMonitoringSoftware(data.security_monitoring_software)
+  const [draft, setDraft] = useState('')
+
+  function updateTags(tags: string[]) {
+    onChange(setField(data, 'security_monitoring_software', { tags }))
+  }
+
+  return (
+    <div className="security-tags-editor">
+      <div className="security-tags-list">
+        {parsed.tags.map((tag) => (
+          <span key={tag} className="tag-pill security-tag-pill">
+            {tag}
+            <button
+              type="button"
+              className="security-tag-remove"
+              aria-label={`Remove ${tag}`}
+              onClick={() => updateTags(parsed.tags.filter((entry) => entry !== tag))}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="security-tags-add">
+        <input
+          type="text"
+          value={draft}
+          list="security-software-suggestions"
+          placeholder="Add software…"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              const next = draft.trim()
+              if (!next) return
+              updateTags([...parsed.tags, next])
+              setDraft('')
+            }
+          }}
+        />
+        <datalist id="security-software-suggestions">
+          {SECURITY_SOFTWARE_SUGGESTIONS.map((entry) => (
+            <option key={entry} value={entry} />
+          ))}
+        </datalist>
+        <button
+          type="button"
+          className="button secondary small"
+          onClick={() => {
+            const next = draft.trim()
+            if (!next) return
+            updateTags([...parsed.tags, next])
+            setDraft('')
+          }}
+        >
+          + Add
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function ItDetailsEditor({
   data,
   onChange,
@@ -86,8 +162,11 @@ export function ItDetailsEditor({
           onChange={(event) => patchItDetails({ mdmStatus: event.target.value })}
         >
           <option value="">Select…</option>
-          <option value="Enrolled">Enrolled</option>
-          <option value="Not enrolled">Not enrolled</option>
+          {MDM_ENROLLMENT_CHOICES.map((choice) => (
+            <option key={choice} value={choice}>
+              {choice}
+            </option>
+          ))}
         </select>
       </label>
       <label className="editable-field-item">
@@ -141,7 +220,17 @@ export function RecordFieldInput({
     if (field.key === 'lifecycle_dates') {
       return <LifecycleDatesEditor data={data} onChange={onChange} />
     }
+    if (field.key === 'security_monitoring_software') {
+      return <SecurityMonitoringEditor data={data} onChange={onChange} />
+    }
     if (field.key === 'it_details') {
+      const deprecated = Boolean(field.options?.deprecated)
+      const hasLegacy =
+        data.it_details &&
+        typeof data.it_details === 'object' &&
+        !Array.isArray(data.it_details) &&
+        Object.keys(data.it_details as Record<string, unknown>).length > 0
+      if (deprecated && !hasLegacy) return null
       return <ItDetailsEditor data={data} onChange={onChange} />
     }
     return null

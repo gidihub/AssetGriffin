@@ -34,7 +34,7 @@ export type GriffinEyeAskResult = {
   trace: GriffinEyeTraceStep[]
   report: GriffinEyeReport | null
   usage?: GriffinVisionUsageSnapshot
-  billingSource?: 'tier_allowance' | 'purchased_credit'
+  billingSource?: 'tier_allowance' | 'purchased_credit' | 'overage'
 }
 
 /** Turns the inline base64 payload into a file the browser saves to disk. */

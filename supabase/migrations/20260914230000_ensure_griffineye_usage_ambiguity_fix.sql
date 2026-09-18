@@ -33,7 +33,8 @@ begin
   select o.subscription_tier, o.griffin_vision_credits_balance
   into v_tier, v_credits
   from public.organizations o
-  where o.id = p_organization_id;
+  where o.id = p_organization_id
+  for update;
 
   if not found then
     raise exception 'Organization not found';
@@ -102,7 +103,7 @@ revoke all on function public.reserve_griffineye_usage(uuid, text) from public;
 grant execute on function public.reserve_griffineye_usage(uuid, text) to authenticated;
 
 create or replace function public.release_griffin_vision_usage(p_usage_log_id uuid)
-returns void
+returns boolean
 language plpgsql
 security definer
 set search_path = public
@@ -119,7 +120,7 @@ begin
   where l.id = p_usage_log_id;
 
   if not found then
-    return;
+    return false;
   end if;
 
   if v_org_id is distinct from public.current_user_organization_id() then
@@ -127,7 +128,8 @@ begin
   end if;
 
   if v_created_at < now() - v_release_window then
-    return;
+    raise notice 'RELEASE_WINDOW_EXPIRED: usage log % is outside the release window', p_usage_log_id;
+    return false;
   end if;
 
   if v_billing_source = 'purchased_credit' then
@@ -137,7 +139,7 @@ begin
       where t.ai_usage_log_id = p_usage_log_id
         and t.transaction_type = 'consumption'
     ) then
-      return;
+      return false;
     end if;
 
     update public.organizations o
@@ -148,10 +150,11 @@ begin
     where t.ai_usage_log_id = p_usage_log_id
       and t.transaction_type = 'consumption';
   elsif v_billing_source <> 'tier_allowance' then
-    return;
+    return false;
   end if;
 
   delete from public.ai_usage_log l where l.id = p_usage_log_id;
+  return true;
 end;
 $$;
 

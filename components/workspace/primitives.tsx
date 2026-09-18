@@ -136,7 +136,7 @@ export function DataTable<T extends { id: string }>({
                 </td>
               )}
               {columns.map((column) => (
-                <td key={column.key} className={column.mono ? 'mono' : ''}>
+                <td key={column.key} className={column.mono ? 'mono-muted' : ''}>
                   {column.render(row)}
                 </td>
               ))}
@@ -239,7 +239,7 @@ export function HistoryList({ items }: { items: { who: string; what: string; whe
       {items.map((item, index) => (
         <li key={index}>
           <strong>{item.what}</strong>
-          <span>{item.who} · {item.when}</span>
+          <span>{item.who} · <span className="mono-muted">{item.when}</span></span>
         </li>
       ))}
     </ul>

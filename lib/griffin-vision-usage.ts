@@ -1,14 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  GRIFFIN_SCAN_OVERAGE_RATE_USD,
+  getScanAbuseCeilingForTier,
+  getScanAllowanceForTier,
+  tierAllowsOverage,
+} from '@/lib/griffin-scan-allowances'
+import { queueOverageScanInvoiceItem } from '@/lib/stripe-overage'
 
 export type SubscriptionTier = 'free' | 'growth' | 'scale' | 'enterprise'
 
 export const GRIFFIN_VISION_USAGE_TYPE = 'griffin_vision_photo' as const
 
-/**
- * Every GriffinEye action that calls OpenAI bills against the same monthly
- * allowance, since they all carry the same underlying cost.
- */
 export const GRIFFINEYE_USAGE_TYPES = [
   'griffin_vision_photo',
   'griffineye_query',
@@ -17,29 +20,39 @@ export const GRIFFINEYE_USAGE_TYPES = [
 
 export type GriffinEyeUsageType = (typeof GRIFFINEYE_USAGE_TYPES)[number]
 
-export type VisionBillingSource = 'tier_allowance' | 'purchased_credit'
+export type VisionBillingSource = 'tier_allowance' | 'purchased_credit' | 'overage'
 
-/** Monthly caps per tier. Enterprise uses a high soft cap until confirmed. */
+/** @deprecated Use getScanAllowanceForTier from griffin-scan-allowances. */
 export const GRIFFIN_VISION_MONTHLY_CAPS: Record<SubscriptionTier, number> = {
-  free: 10,
-  growth: 100,
-  scale: 1000,
+  free: 50,
+  growth: 500,
+  scale: 2_500,
   enterprise: 10_000,
 }
 
 export type GriffinVisionUsageSnapshot = {
   tier: SubscriptionTier
-  /** Tier allowance used this calendar month (excludes credit-backed scans). */
+  /** Included allowance consumed this calendar month. */
   used: number
   cap: number
   remaining: number
   monthKey: string
-  /** Tier monthly allowance exhausted. */
+  /** Included allowance exhausted (may still scan on paid tiers via overage). */
   atCap: boolean
+  /** Overage scans consumed this month (paid tiers only). */
+  overageUsed: number
+  overageChargeUsd: number
+  /** Total scans this month (allowance + overage + legacy credits). */
+  totalUsed: number
+  abuseCeiling: number
+  atAbuseCeiling: boolean
+  allowsOverage: boolean
+  /** Next scan will bill as overage. */
+  willUseOverage: boolean
+  /** @deprecated Legacy purchased scan balance — pack sales removed. */
   creditBalance: number
-  /** Whether another photo scan can proceed (tier remaining or credits available). */
   canScan: boolean
-  /** Next scan will consume a purchased credit instead of tier allowance. */
+  /** @deprecated Legacy — use willUseOverage. */
   willUseCredit: boolean
 }
 
@@ -59,18 +72,30 @@ function normalizeTier(value: string | null | undefined): SubscriptionTier {
 }
 
 export function getVisionCapForTier(tier: SubscriptionTier): number {
-  return GRIFFIN_VISION_MONTHLY_CAPS[tier]
+  return getScanAllowanceForTier(tier)
+}
+
+export function isGenuineAbuseCapViolation(snapshot: GriffinVisionUsageSnapshot): boolean {
+  return snapshot.atAbuseCeiling && snapshot.abuseCeiling > snapshot.cap
 }
 
 export function buildVisionCapMessage(
   snapshot: GriffinVisionUsageSnapshot,
-  actionLabel = 'photo scans',
-  fallbackHint = 'Buy more scans, upgrade your plan, or use spreadsheet import to continue.',
+  actionLabel = 'scans',
 ): string {
-  if (snapshot.creditBalance > 0) {
-    return `You've used all ${snapshot.cap} included GriffinEye ${actionLabel} this month. Purchased credits will be used automatically.`
+  if (isGenuineAbuseCapViolation(snapshot)) {
+    return `Your organization reached the monthly GriffinEye safety limit (${snapshot.abuseCeiling.toLocaleString()} ${actionLabel}). Contact support to review usage before scanning again.`
   }
-  return `You've used all ${snapshot.cap} of your GriffinEye ${actionLabel} this month. ${fallbackHint}`
+
+  if (snapshot.tier === 'free') {
+    return `You've used all ${snapshot.cap} included GriffinEye ${actionLabel} this month. Upgrade to Growth or higher to keep scanning, or use spreadsheet import to add assets without AI.`
+  }
+
+  if (snapshot.allowsOverage) {
+    return `You've used all ${snapshot.cap} included GriffinEye ${actionLabel} this month. Additional scans on your plan are $${GRIFFIN_SCAN_OVERAGE_RATE_USD.toFixed(2)} each and are added to your next invoice.`
+  }
+
+  return `You've used all ${snapshot.cap} included GriffinEye ${actionLabel} this month.`
 }
 
 export async function getOrganizationTier(
@@ -101,10 +126,6 @@ export async function getCreditBalance(
   return data?.griffin_vision_credits_balance ?? 0
 }
 
-/**
- * Tier allowance consumed this calendar month across every GriffinEye action —
- * photo scans, natural-language queries, and text extraction share one pool.
- */
 export async function getMonthlyTierVisionUsage(
   supabase: SupabaseClient,
   organizationId: string,
@@ -121,19 +142,54 @@ export async function getMonthlyTierVisionUsage(
   return count ?? 0
 }
 
+export async function getMonthlyOverageUsage(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<number> {
+  const since = monthStartUtc()
+  const { count, error } = await supabase
+    .from('ai_usage_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .eq('billing_source', 'overage')
+    .gte('created_at', since)
+
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+export async function getMonthlyTotalVisionUsage(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<number> {
+  const since = monthStartUtc()
+  const { count, error } = await supabase
+    .from('ai_usage_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .gte('created_at', since)
+
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
 export async function getVisionUsageSnapshot(
   supabase: SupabaseClient,
   organizationId: string,
   tier?: SubscriptionTier,
 ): Promise<GriffinVisionUsageSnapshot> {
   const resolvedTier = tier ?? (await getOrganizationTier(supabase, organizationId))
-  const cap = getVisionCapForTier(resolvedTier)
+  const cap = getScanAllowanceForTier(resolvedTier)
+  const abuseCeiling = getScanAbuseCeilingForTier(resolvedTier)
   const used = await getMonthlyTierVisionUsage(supabase, organizationId)
+  const overageUsed = await getMonthlyOverageUsage(supabase, organizationId)
+  const totalUsed = await getMonthlyTotalVisionUsage(supabase, organizationId)
   const creditBalance = await getCreditBalance(supabase, organizationId)
   const remaining = Math.max(0, cap - used)
   const atCap = used >= cap
-  const willUseCredit = atCap && creditBalance > 0
-  const canScan = remaining > 0 || creditBalance > 0
+  const allowsOverage = tierAllowsOverage(resolvedTier)
+  const atAbuseCeiling = totalUsed >= abuseCeiling && abuseCeiling > cap
+  const willUseOverage = allowsOverage && atCap && !atAbuseCeiling
 
   return {
     tier: resolvedTier,
@@ -142,9 +198,16 @@ export async function getVisionUsageSnapshot(
     remaining,
     monthKey: monthStartUtc().slice(0, 7),
     atCap,
+    overageUsed,
+    overageChargeUsd: overageUsed * GRIFFIN_SCAN_OVERAGE_RATE_USD,
+    totalUsed,
+    abuseCeiling,
+    atAbuseCeiling,
+    allowsOverage,
+    willUseOverage,
     creditBalance,
-    canScan,
-    willUseCredit,
+    canScan: !atAbuseCeiling && (remaining > 0 || allowsOverage),
+    willUseCredit: false,
   }
 }
 
@@ -155,13 +218,22 @@ export async function getVisionUsageAccess(
   const snapshot = await getVisionUsageSnapshot(supabase, organizationId)
 
   if (!snapshot.canScan) {
+    if (isGenuineAbuseCapViolation(snapshot)) {
+      console.warn('[griffineye/abuse-cap]', {
+        organizationId,
+        tier: snapshot.tier,
+        totalUsed: snapshot.totalUsed,
+        abuseCeiling: snapshot.abuseCeiling,
+      })
+    }
     const error = new Error(buildVisionCapMessage(snapshot))
-    ;(error as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'VISION_CAP_EXCEEDED'
-    ;(error as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).snapshot = snapshot
+    const coded = error as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }
+    coded.code = isGenuineAbuseCapViolation(snapshot) ? 'ABUSE_CAP_EXCEEDED' : 'VISION_CAP_EXCEEDED'
+    coded.snapshot = snapshot
     throw error
   }
 
-  const billingSource: VisionBillingSource = snapshot.remaining > 0 ? 'tier_allowance' : 'purchased_credit'
+  const billingSource: VisionBillingSource = snapshot.remaining > 0 ? 'tier_allowance' : 'overage'
 
   return { snapshot, billingSource }
 }
@@ -184,65 +256,42 @@ function isBillingSourceAmbiguityError(message: string): boolean {
   return message.includes('billing_source') && message.includes('ambiguous')
 }
 
-async function applyCreditDelta(
-  admin: SupabaseClient,
-  organizationId: string,
-  delta: number,
-): Promise<number> {
-  const { data, error } = await admin.rpc('apply_griffin_vision_credit_delta', {
-    p_organization_id: organizationId,
-    p_delta: delta,
-  })
-
-  if (error) {
-    if (error.message.includes('Insufficient credits')) {
-      throw new Error('Insufficient credits')
-    }
-    throw new Error(error.message)
-  }
-
-  if (typeof data !== 'number') {
-    throw new Error('Could not adjust credit balance.')
-  }
-
-  return data
-}
-
-/**
- * Fallback when reserve_griffineye_usage in Postgres still shadows billing_source
- * via RETURNS TABLE. Mirrors the RPC logic without a single DB transaction.
- */
 async function reserveVisionUsageFallback(
   supabase: SupabaseClient,
   organizationId: string,
   usageType: GriffinEyeUsageType,
 ): Promise<VisionUsageReservation> {
   const tier = await getOrganizationTier(supabase, organizationId)
-  const cap = getVisionCapForTier(tier)
+  const cap = getScanAllowanceForTier(tier)
+  const abuseCeiling = getScanAbuseCeilingForTier(tier)
   const tierUsed = await getMonthlyTierVisionUsage(supabase, organizationId)
-  const creditBalance = await getCreditBalance(supabase, organizationId)
+  const totalUsed = await getMonthlyTotalVisionUsage(supabase, organizationId)
 
-  let billingSource: VisionBillingSource
-  if (tierUsed < cap) {
-    billingSource = 'tier_allowance'
-  } else if (creditBalance > 0) {
-    billingSource = 'purchased_credit'
-  } else {
+  if (totalUsed >= abuseCeiling && abuseCeiling > cap) {
     const snapshot = await getVisionUsageSnapshot(supabase, organizationId, tier)
     const capError = new Error(buildVisionCapMessage(snapshot))
-    ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'VISION_CAP_EXCEEDED'
+    ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'ABUSE_CAP_EXCEEDED'
     ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).snapshot = snapshot
     throw capError
   }
 
-  // Service role bypasses RLS — same writes the broken RPC would have made.
-  const admin = createAdminClient()
-  let creditsBalanceAfter: number | null = null
-
-  if (billingSource === 'purchased_credit') {
-    creditsBalanceAfter = await applyCreditDelta(admin, organizationId, -1)
+  let billingSource: VisionBillingSource
+  if (tier === 'free') {
+    if (tierUsed >= cap) {
+      const snapshot = await getVisionUsageSnapshot(supabase, organizationId, tier)
+      const capError = new Error(buildVisionCapMessage(snapshot))
+      ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'VISION_CAP_EXCEEDED'
+      ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).snapshot = snapshot
+      throw capError
+    }
+    billingSource = 'tier_allowance'
+  } else if (tierUsed < cap) {
+    billingSource = 'tier_allowance'
+  } else {
+    billingSource = 'overage'
   }
 
+  const admin = createAdminClient()
   const { data: logRow, error: logError } = await admin
     .from('ai_usage_log')
     .insert({
@@ -254,26 +303,13 @@ async function reserveVisionUsageFallback(
     .single()
 
   if (logError || !logRow?.id) {
-    if (billingSource === 'purchased_credit') {
-      await applyCreditDelta(admin, organizationId, 1).catch(() => undefined)
-    }
     throw new Error(logError?.message ?? 'Could not reserve GriffinEye usage.')
   }
 
-  if (billingSource === 'purchased_credit' && creditsBalanceAfter !== null) {
-    const { error: txError } = await admin.from('ai_credit_transactions').insert({
-      organization_id: organizationId,
-      transaction_type: 'consumption',
-      credits_delta: -1,
-      credits_balance_after: creditsBalanceAfter,
-      ai_usage_log_id: logRow.id,
+  if (billingSource === 'overage') {
+    queueOverageScanInvoiceItem(supabase, organizationId).catch((invoiceError) => {
+      console.error('[griffin-vision/overage-invoice]', invoiceError)
     })
-
-    if (txError) {
-      await admin.from('ai_usage_log').delete().eq('id', logRow.id)
-      await applyCreditDelta(admin, organizationId, 1).catch(() => undefined)
-      throw new Error(txError.message)
-    }
   }
 
   return { usageLogId: logRow.id, billingSource }
@@ -290,6 +326,13 @@ export async function reserveVisionUsage(
   })
 
   if (error) {
+    if (error.message.includes('ABUSE_CAP_EXCEEDED')) {
+      const snapshot = await getVisionUsageSnapshot(supabase, organizationId)
+      const capError = new Error(buildVisionCapMessage(snapshot))
+      ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).code = 'ABUSE_CAP_EXCEEDED'
+      ;(capError as Error & { code: string; snapshot: GriffinVisionUsageSnapshot }).snapshot = snapshot
+      throw capError
+    }
     if (error.message.includes('VISION_CAP_EXCEEDED')) {
       const snapshot = await getVisionUsageSnapshot(supabase, organizationId)
       const capError = new Error(buildVisionCapMessage(snapshot))
@@ -308,9 +351,17 @@ export async function reserveVisionUsage(
     throw new Error('Could not reserve GriffinEye usage.')
   }
 
+  const billingSource = row.billing_source as VisionBillingSource
+
+  if (billingSource === 'overage') {
+    queueOverageScanInvoiceItem(supabase, organizationId).catch((invoiceError) => {
+      console.error('[griffin-vision/overage-invoice]', invoiceError)
+    })
+  }
+
   return {
     usageLogId: row.usage_log_id as string,
-    billingSource: row.billing_source as VisionBillingSource,
+    billingSource,
   }
 }
 
@@ -325,7 +376,7 @@ export async function releaseVisionUsage(
   if (error) throw new Error(error.message)
 }
 
-/** @deprecated Prefer reserveVisionUsage — kept for callers that pre-select billing source. */
+/** @deprecated Prefer reserveVisionUsage. */
 export async function recordVisionUsage(
   supabase: SupabaseClient,
   organizationId: string,
@@ -337,6 +388,23 @@ export async function recordVisionUsage(
   })
 
   if (error) throw new Error(error.message)
+}
+
+export function visionCapExceededPayload(
+  snapshot: GriffinVisionUsageSnapshot,
+  code: 'VISION_CAP_EXCEEDED' | 'ABUSE_CAP_EXCEEDED' = 'VISION_CAP_EXCEEDED',
+) {
+  return {
+    error: buildVisionCapMessage(snapshot),
+    code,
+    tier: snapshot.tier,
+    used: snapshot.used,
+    cap: snapshot.cap,
+    overageUsed: snapshot.overageUsed,
+    overageChargeUsd: snapshot.overageChargeUsd,
+    totalUsed: snapshot.totalUsed,
+    abuseCeiling: snapshot.abuseCeiling,
+  }
 }
 
 export async function getRecentVisionUsageCount(

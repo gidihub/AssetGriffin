@@ -33,10 +33,19 @@ export async function saveIntakeAsset(draft: AssetIntakeDraft): Promise<AssetRec
     body: JSON.stringify(draft),
   })
 
-  const data = (await response.json()) as { record?: unknown; asset?: unknown; error?: string }
   if (!response.ok) {
-    throw new Error(data.error ?? 'Could not save asset.')
+    const raw = await response.text()
+    let message = 'Could not save asset.'
+    try {
+      const payload = JSON.parse(raw) as { error?: string }
+      if (payload.error) message = payload.error
+    } catch {
+      if (raw.trim()) message = raw.trim()
+    }
+    throw new Error(`${message} (HTTP ${response.status})`)
   }
+
+  const data = (await response.json()) as { record?: unknown; asset?: unknown; error?: string }
 
   if (data.record) {
     return recordFromApiPayload(data.record)

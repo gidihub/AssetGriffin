@@ -5,8 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, CloudUpload, ImagePlus, PencilLine, ShieldCheck, X } from 'lucide-react'
 import { GriffinEyeIcon } from '@/components/griffineye/griffineye-icon'
 import { GriffinEyeThinking } from '@/components/griffineye/griffineye-thinking'
-import { GriffinCreditPurchase } from '@/components/workspace/griffin-credit-purchase'
 import { GriffinEyeUsageIndicator } from '@/components/workspace/griffineye-usage-indicator'
+import {
+  BRAND_CHOICES,
+  DEVICE_TYPE_CHOICES,
+  MDM_ENROLLMENT_CHOICES,
+  OPERATING_SYSTEM_CHOICES,
+  RAM_CHOICES,
+  SECURITY_SOFTWARE_SUGGESTIONS,
+  type AssetSpecFieldKey,
+} from '@/lib/asset-spec-fields'
+import { parseSpecDump } from '@/lib/asset-spec-normalization'
 import {
   ASSET_CATEGORIES,
   MAX_DESCRIPTION_LENGTH,
@@ -62,6 +71,47 @@ const EMPTY_REVIEW_FIELDS: ReviewFields = {
   safetyNotes: '',
 }
 
+type SpecReviewFields = {
+  originalName: string
+  cleanName: string
+  categoryHint: string
+  brand: string
+  device_type: string
+  model: string
+  operating_system: string
+  processor: string
+  ram: string
+  storage: string
+  color: string
+  mdm_enrollment_status: string
+  security_monitoring_software: string[]
+}
+
+const EMPTY_SPEC_REVIEW: SpecReviewFields = {
+  originalName: '',
+  cleanName: '',
+  categoryHint: '',
+  brand: '',
+  device_type: '',
+  model: '',
+  operating_system: '',
+  processor: '',
+  ram: '',
+  storage: '',
+  color: '',
+  mdm_enrollment_status: '',
+  security_monitoring_software: [],
+}
+
+function intakeCategoryFromSpec(deviceType: string): AssetCategory {
+  const token = deviceType.toLowerCase()
+  if (token === 'tablet') return 'Tablet'
+  if (token === 'monitor') return 'Monitor'
+  if (token === 'desktop') return 'Desktop'
+  if (token === 'laptop') return 'Laptop'
+  return 'Other'
+}
+
 function FieldLabel({
   label,
   suggested,
@@ -88,47 +138,45 @@ function FieldLabel({
 
 function VisionCapNotice({
   cap,
-  creditBalance,
+  tier,
+  abuseCap = false,
   onOpenSpreadsheetImport,
 }: {
   cap: number
-  creditBalance: number
+  tier: GriffinVisionUsageSnapshot['tier']
+  abuseCap?: boolean
   onOpenSpreadsheetImport?: () => void
 }) {
-  const [showPurchase, setShowPurchase] = useState(false)
+  const isFree = tier === 'free'
 
   return (
     <div className="workflow-note vision-cap-notice" style={{ color: '#8A4B00', background: '#FFF4E5' }}>
       <div>
-        <strong>You&apos;ve used all {cap} of your included GriffinEye AI actions this month.</strong>
+        <strong>
+          {abuseCap
+            ? `You've reached the monthly GriffinEye safety limit (${cap.toLocaleString()} scans).`
+            : `You've used all ${cap} of your included GriffinEye scans this month.`}
+        </strong>
         <p style={{ margin: '8px 0 0' }}>
-          {creditBalance > 0
-            ? `${creditBalance} purchased credits are still available and will be used automatically.`
-            : 'Buy more credits, upgrade your plan, or use spreadsheet import to continue adding assets.'}
+          {abuseCap
+            ? 'Contact support to review usage before scanning again, or use spreadsheet import to add assets without AI.'
+            : isFree
+              ? 'Upgrade to Growth or higher to keep scanning with AI, or use spreadsheet import to add assets without using scans.'
+              : 'Additional scans on your plan are billed at $0.02 each on your next invoice, or you can use spreadsheet import instead.'}
         </p>
       </div>
-      {creditBalance === 0 ? (
-        <>
-          <div className="vision-cap-actions">
-            <button type="button" className="button primary small" onClick={() => setShowPurchase((open) => !open)}>
-              Buy more credits
-            </button>
-            <Link href="/#pricing" className="button secondary small">
-              Upgrade your plan
-            </Link>
-            {onOpenSpreadsheetImport ? (
-              <button type="button" className="button secondary small" onClick={onOpenSpreadsheetImport}>
-                Use spreadsheet import instead
-              </button>
-            ) : null}
-          </div>
-          {showPurchase ? (
-            <div className="vision-cap-purchase">
-              <GriffinCreditPurchase compact />
-            </div>
-          ) : null}
-        </>
-      ) : null}
+      <div className="vision-cap-actions">
+        {isFree ? (
+          <Link href="/#pricing" className="button primary small">
+            Upgrade your plan
+          </Link>
+        ) : null}
+        {onOpenSpreadsheetImport ? (
+          <button type="button" className="button secondary small" onClick={onOpenSpreadsheetImport}>
+            Use spreadsheet import instead
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -152,11 +200,22 @@ export function GriffinEyeIntakeModal({
   const [saving, setSaving] = useState(false)
   const [usage, setUsage] = useState<GriffinVisionUsageSnapshot | null>(null)
   const [usageRefreshKey, setUsageRefreshKey] = useState(0)
-  const [capExceeded, setCapExceeded] = useState<{ cap: number; creditBalance: number } | null>(null)
+  const [capExceeded, setCapExceeded] = useState<{
+    cap: number
+    tier: GriffinVisionUsageSnapshot['tier']
+    abuseCap: boolean
+  } | null>(null)
   const [showBulkNudge, setShowBulkNudge] = useState(false)
   const [suggestedFields, setSuggestedFields] = useState<Set<keyof ReviewFields>>(new Set())
   const [fieldConflicts, setFieldConflicts] = useState<GriffinEyeFieldConflict[]>([])
   const [fields, setFields] = useState<ReviewFields>(EMPTY_REVIEW_FIELDS)
+  const [specReview, setSpecReview] = useState<SpecReviewFields | null>(null)
+  const [specSuggested, setSpecSuggested] = useState<Set<AssetSpecFieldKey>>(new Set())
+  const photosRef = useRef(photos)
+
+  useEffect(() => {
+    photosRef.current = photos
+  }, [photos])
 
   const conflictByField = useMemo(() => {
     const map = new Map<keyof ReviewFields, GriffinEyeFieldConflict>()
@@ -168,17 +227,17 @@ export function GriffinEyeIntakeModal({
 
   useEffect(() => {
     return () => {
-      for (const photo of photos) {
+      for (const photo of photosRef.current) {
         URL.revokeObjectURL(photo.previewUrl)
       }
     }
-  }, [photos])
+  }, [])
 
   /**
    * Photo and text intake differ only in what they send: both meter usage the
    * same way, surface the same cap notice, and land on the same review screen.
    */
-  const runExtraction = useCallback(async (send: () => Promise<Response>, failureMessage: string) => {
+  const runExtraction = useCallback(async (send: () => Promise<Response>, failureMessage: string, specText?: string) => {
     setError(null)
     setStage('processing')
 
@@ -186,21 +245,36 @@ export function GriffinEyeIntakeModal({
       const response = await send()
       const data = (await response.json()) as GriffinEyeVisionResult & GriffinEyeVisionErrorResponse
 
-      if (response.status === 429 && data.code === 'VISION_CAP_EXCEEDED') {
-        const creditBalance = data.creditBalance ?? 0
-        setCapExceeded({ cap: data.cap ?? usage?.cap ?? 0, creditBalance })
+      if (
+        response.status === 429 &&
+        (data.code === 'VISION_CAP_EXCEEDED' || data.code === 'ABUSE_CAP_EXCEEDED')
+      ) {
+        const tier = (data.tier as GriffinVisionUsageSnapshot['tier']) ?? usage?.tier ?? 'free'
+        const abuseCap = data.code === 'ABUSE_CAP_EXCEEDED'
+        setCapExceeded({
+          cap: abuseCap ? (data.abuseCeiling ?? data.cap ?? usage?.abuseCeiling ?? 0) : (data.cap ?? usage?.cap ?? 0),
+          tier,
+          abuseCap,
+        })
         setUsage((current) =>
           data.cap != null && data.used != null
             ? {
-                tier: (data.tier as GriffinVisionUsageSnapshot['tier']) ?? current?.tier ?? 'free',
+                tier,
                 used: data.used,
                 cap: data.cap,
                 remaining: 0,
                 monthKey: current?.monthKey ?? '',
                 atCap: true,
-                creditBalance,
-                canScan: creditBalance > 0,
-                willUseCredit: creditBalance > 0,
+                overageUsed: data.overageUsed ?? 0,
+                overageChargeUsd: data.overageChargeUsd ?? 0,
+                totalUsed: data.totalUsed ?? data.used,
+                abuseCeiling: data.abuseCeiling ?? data.cap ?? 0,
+                atAbuseCeiling: data.code === 'ABUSE_CAP_EXCEEDED',
+                allowsOverage: tier !== 'free',
+                willUseOverage: false,
+                creditBalance: 0,
+                canScan: false,
+                willUseCredit: false,
               }
             : current,
         )
@@ -214,7 +288,7 @@ export function GriffinEyeIntakeModal({
       }
 
       recordVisionCallLocally()
-      if (data.usage) setUsage(data.usage)
+      if ('usage' in data) setUsage(data.usage ?? null)
       setUsageRefreshKey((key) => key + 1)
       setCapExceeded(null)
       setShowBulkNudge(shouldShowBulkImportNudge())
@@ -222,7 +296,7 @@ export function GriffinEyeIntakeModal({
       setExtraction(data)
       setSuggestedFields(new Set(data.suggestedFields))
       setFieldConflicts(data.fieldConflicts ?? [])
-      setFields({
+      const nextFields: ReviewFields = {
         manufacturer: data.manufacturer,
         model: data.model,
         sku: data.sku,
@@ -234,7 +308,39 @@ export function GriffinEyeIntakeModal({
         location: data.location,
         conditionNotes: data.conditionNotes,
         safetyNotes: data.safetyNotes,
-      })
+      }
+      const specSource =
+        specText ||
+        [data.manufacturer, data.model].filter(Boolean).join(', ') ||
+        data.summary
+      const parsedSpec = parseSpecDump(specSource)
+      if (parsedSpec.wasSpecDump) {
+        setSpecReview({
+          originalName: parsedSpec.originalName,
+          cleanName: parsedSpec.name,
+          categoryHint: parsedSpec.categoryHint,
+          brand: parsedSpec.brand,
+          device_type: parsedSpec.device_type,
+          model: parsedSpec.model,
+          operating_system: parsedSpec.operating_system,
+          processor: parsedSpec.processor,
+          ram: parsedSpec.ram,
+          storage: parsedSpec.storage,
+          color: parsedSpec.color,
+          mdm_enrollment_status: parsedSpec.mdm_enrollment_status,
+          security_monitoring_software: parsedSpec.security_monitoring_software,
+        })
+        setSpecSuggested(new Set(parsedSpec.suggestedFields))
+        nextFields.manufacturer = parsedSpec.brand || nextFields.manufacturer
+        nextFields.model = parsedSpec.model || nextFields.model
+        if (parsedSpec.device_type) {
+          nextFields.category = intakeCategoryFromSpec(parsedSpec.device_type)
+        }
+      } else {
+        setSpecReview(null)
+        setSpecSuggested(new Set())
+      }
+      setFields(nextFields)
       setStage('review')
     } catch (err) {
       setStage('upload')
@@ -268,6 +374,7 @@ export function GriffinEyeIntakeModal({
             body: JSON.stringify({ description: text }),
           }),
         'GriffinEye could not read that description.',
+        text,
       )
     },
     [runExtraction],
@@ -498,6 +605,135 @@ export function GriffinEyeIntakeModal({
           </label>
         </div>
 
+        {specReview ? (
+          <div className="extracted-spec-panel">
+            <div className="extracted-spec-header">
+              <span className="eyebrow">SPECIFICATIONS (AI-SUGGESTED)</span>
+              <p>
+                Parsed from the original value: <strong>{specReview.originalName}</strong>. Edit any field
+                before saving — nothing is written until you confirm.
+              </p>
+            </div>
+            <div className="extracted-fields">
+              <label>
+                <FieldLabel label="Clean name" suggested={specSuggested.has('brand')} />
+                <input
+                  value={specReview.cleanName}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, cleanName: event.target.value } : current))}
+                />
+              </label>
+              <label>
+                <FieldLabel label="Brand" suggested={specSuggested.has('brand')} />
+                <select
+                  value={specReview.brand}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, brand: event.target.value } : current))}
+                >
+                  <option value="">Select…</option>
+                  {BRAND_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>{choice}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <FieldLabel label="Device type" suggested={specSuggested.has('device_type')} />
+                <select
+                  value={specReview.device_type}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, device_type: event.target.value } : current))}
+                >
+                  <option value="">Select…</option>
+                  {DEVICE_TYPE_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>{choice}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <FieldLabel label="Model" suggested={specSuggested.has('model')} />
+                <input
+                  value={specReview.model}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, model: event.target.value } : current))}
+                />
+              </label>
+              <label>
+                <FieldLabel label="Operating system" suggested={specSuggested.has('operating_system')} />
+                <select
+                  value={specReview.operating_system}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, operating_system: event.target.value } : current))}
+                >
+                  <option value="">Select…</option>
+                  {OPERATING_SYSTEM_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>{choice}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <FieldLabel label="Processor" suggested={specSuggested.has('processor')} />
+                <input
+                  value={specReview.processor}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, processor: event.target.value } : current))}
+                />
+              </label>
+              <label>
+                <FieldLabel label="RAM" suggested={specSuggested.has('ram')} />
+                <select
+                  value={specReview.ram}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, ram: event.target.value } : current))}
+                >
+                  <option value="">Select…</option>
+                  {RAM_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>{choice}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <FieldLabel label="Storage" suggested={specSuggested.has('storage')} />
+                <input
+                  value={specReview.storage}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, storage: event.target.value } : current))}
+                />
+              </label>
+              <label>
+                <FieldLabel label="Color" suggested={specSuggested.has('color')} />
+                <input
+                  value={specReview.color}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, color: event.target.value } : current))}
+                />
+              </label>
+              <label>
+                <FieldLabel label="MDM enrollment" suggested={specSuggested.has('mdm_enrollment_status')} />
+                <select
+                  value={specReview.mdm_enrollment_status}
+                  onChange={(event) => setSpecReview((current) => (current ? { ...current, mdm_enrollment_status: event.target.value } : current))}
+                >
+                  <option value="">Select…</option>
+                  {MDM_ENROLLMENT_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>{choice}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="extracted-field-full">
+                <FieldLabel label="Security & monitoring software" suggested={specSuggested.has('security_monitoring_software')} />
+                <input
+                  value={specReview.security_monitoring_software.join(', ')}
+                  onChange={(event) =>
+                    setSpecReview((current) =>
+                      current
+                        ? {
+                            ...current,
+                            security_monitoring_software: event.target.value
+                              .split(',')
+                              .map((entry) => entry.trim())
+                              .filter(Boolean),
+                          }
+                        : current,
+                    )
+                  }
+                  placeholder={SECURITY_SOFTWARE_SUGGESTIONS.join(', ')}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
+
         {extraction.notes ? (
           <div className="workflow-note" style={{ marginTop: 12 }}>
             <GriffinEyeIcon size={16} />
@@ -567,8 +803,8 @@ export function GriffinEyeIntakeModal({
             setError(null)
             try {
               await onComplete({
-                manufacturer: fields.manufacturer,
-                model: fields.model,
+                manufacturer: specReview?.brand || fields.manufacturer,
+                model: specReview?.model || fields.model,
                 sku: fields.sku,
                 serialNumber: fields.serialNumber,
                 manufactureDate: fields.manufactureDate,
@@ -580,6 +816,19 @@ export function GriffinEyeIntakeModal({
                 safetyNotes: fields.safetyNotes,
                 assignedTo: fields.assignedTo,
                 location: fields.location,
+                brand: specReview?.brand,
+                device_type: specReview?.device_type,
+                modelField: specReview?.model,
+                operating_system: specReview?.operating_system,
+                processor: specReview?.processor,
+                ram: specReview?.ram,
+                storage: specReview?.storage,
+                color: specReview?.color,
+                mdm_enrollment_status: specReview?.mdm_enrollment_status,
+                security_monitoring_software: specReview?.security_monitoring_software,
+                categoryHint: specReview?.categoryHint,
+                cleanName: specReview?.cleanName,
+                specDumpOriginalName: specReview?.originalName,
               })
             } catch (err) {
               setSaving(false)
@@ -740,7 +989,7 @@ export function GriffinEyeIntakeModal({
         disabled={
           (mode === 'photo' ? photos.length === 0 : description.trim().length < MIN_DESCRIPTION_LENGTH) ||
           stage === 'processing' ||
-          (capExceeded != null && capExceeded.creditBalance === 0)
+          capExceeded != null
         }
         onClick={() => void handleExtract()}
       >
@@ -752,7 +1001,8 @@ export function GriffinEyeIntakeModal({
       {capExceeded ? (
         <VisionCapNotice
           cap={capExceeded.cap}
-          creditBalance={capExceeded.creditBalance}
+          tier={capExceeded.tier}
+          abuseCap={capExceeded.abuseCap}
           onOpenSpreadsheetImport={onOpenSpreadsheetImport}
         />
       ) : null}
@@ -803,8 +1053,8 @@ export function GriffinEyeIntakeModal({
       <div className="workflow-note">
         <GriffinEyeIcon size={16} />
         <span>
-          <strong>GriffinEye suggests, you confirm.</strong> Up to {MAX_INTAKE_PHOTOS} photos count as one extraction
-          credit. Review fields before saving.
+          <strong>GriffinEye suggests, you confirm.</strong> Up to {MAX_INTAKE_PHOTOS} photos count as one scan. Review
+          fields before saving.
         </span>
       </div>
     </div>

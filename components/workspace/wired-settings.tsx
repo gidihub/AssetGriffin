@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DEFAULT_NOTIFICATIONS } from '@/lib/settings-types'
 import {
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useWorkspaceSettings } from '@/components/workspace/settings-context'
 import { GriffinBillingCredits } from '@/components/workspace/griffin-billing-credits'
+import { OrgBrandMark } from '@/components/workspace/org-brand-mark'
 import { DataTable, DetailDrawer, DrawerSection, EmptyState, StatusBadge, ToggleRow } from './primitives'
 import type { NotificationPreferences, UserPreferences } from '@/lib/settings-types'
 
@@ -45,20 +46,20 @@ function initialsFromName(name: string) {
     .join('') || '?'
 }
 
-function SettingsCard({ title, description, action, children }: { title: string; description?: string; action?: React.ReactNode; children: React.ReactNode }) {
+function SettingsCard({ title, description, action, children, flush }: { title: string; description?: string; action?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
   return (
     <div className="settings-card">
       <div className="settings-card-header">
         <div><h2>{title}</h2>{description && <p>{description}</p>}</div>
         {action}
       </div>
-      {children}
+      {flush ? children : <div className="settings-card-body">{children}</div>}
     </div>
   )
 }
 
 export function WiredProfileSettings({ onAnnounce }: { onAnnounce: Announce }) {
-  const { data, patchSection, loading } = useWorkspaceSettings()
+  const { data, patchSection, loading, error, refresh } = useWorkspaceSettings()
   const profile = data?.profile
   const orgName = data?.organization.name ?? 'your workspace'
   const [fullName, setFullName] = useState('')
@@ -80,7 +81,20 @@ export function WiredProfileSettings({ onAnnounce }: { onAnnounce: Announce }) {
     }
   }
 
-  if (loading && !profile) return <EmptyState title="Loading profile…" description="Fetching your account details." />
+  if (loading && !profile) {
+    return <EmptyState title="Loading profile…" description="Fetching your account details." />
+  }
+
+  if (error && !profile) {
+    return (
+      <EmptyState
+        title="Could not load profile"
+        description={error}
+        ctaLabel="Try again"
+        onCta={() => void refresh()}
+      />
+    )
+  }
 
   return (
     <SettingsCard title="Personal information" description={`This is how you appear across ${orgName}.`} action={<button className="button primary small" onClick={() => void save()}>Save changes</button>}>
@@ -106,7 +120,7 @@ export function WiredProfileSettings({ onAnnounce }: { onAnnounce: Announce }) {
   )
 }
 
-export function WiredBillingSettings({ onAnnounce, creditPurchaseNotice, checkoutSessionId }: { onAnnounce: Announce; creditPurchaseNotice?: 'cancelled' | null; checkoutSessionId?: string | null }) {
+export function WiredBillingSettings({ onAnnounce }: { onAnnounce: Announce }) {
   const { data } = useWorkspaceSettings()
   const billing = data?.billing
   const orgName = data?.organization.name ?? 'Your workspace'
@@ -117,7 +131,7 @@ export function WiredBillingSettings({ onAnnounce, creditPurchaseNotice, checkou
 
   return (
     <>
-      <SettingsCard title="Current plan" description={`${orgName} is on the ${billing?.plan ?? 'Free'} plan.`} action={<button className="button secondary small" onClick={() => onAnnounce('Subscription billing is coming soon. GriffinEye credits are live below.')}>Change plan</button>}>
+      <SettingsCard title="Current plan" description={`${orgName} is on the ${billing?.plan ?? 'Free'} plan.`} action={<button className="button secondary small" onClick={() => onAnnounce('Subscription billing is coming soon. GriffinEye scan usage is shown below.')}>Change plan</button>}>
         <div className="billing-plan-row">
           <div className="plan-tier-card">
             <span className="eyebrow">CURRENT PLAN</span>
@@ -131,7 +145,7 @@ export function WiredBillingSettings({ onAnnounce, creditPurchaseNotice, checkou
           </div>
         </div>
       </SettingsCard>
-      <GriffinBillingCredits purchaseNotice={creditPurchaseNotice} checkoutSessionId={checkoutSessionId} />
+      <GriffinBillingCredits />
     </>
   )
 }
@@ -167,7 +181,7 @@ export function WiredNotificationsSettings({ onAnnounce }: { onAnnounce: Announc
   const controlsReady = initialized && !loading
 
   return (
-    <SettingsCard title="Alert preferences" description={`Changes apply to your account across ${data?.organization.name ?? 'your workspace'}.`} action={<button className="button primary small" onClick={() => void save()} disabled={!controlsReady}>Save changes</button>}>
+    <SettingsCard flush title="Alert preferences" description={`Changes apply to your account across ${data?.organization.name ?? 'your workspace'}.`} action={<button className="button primary small" onClick={() => void save()} disabled={!controlsReady}>Save changes</button>}>
       {rows.map((row) => (
         <ToggleRow key={row.key} label={row.label} description={row.description} checked={state[row.key]} onChange={(checked) => setState((s) => ({ ...s, [row.key]: checked }))} disabled={!controlsReady} />
       ))}
@@ -195,22 +209,38 @@ export function WiredPreferencesSettings({ onAnnounce, onStartOnboarding }: { on
       <SettingsCard title="Workspace defaults" description="These settings only affect how the workspace looks and feels for you." action={<button className="button primary small" onClick={() => void save()}>Save changes</button>}>
         <div className="form-grid">
           <label>Date format
-            <select value={prefs?.dateFormat ?? 'MM/DD/YYYY'} onChange={(e) => setPrefs((p) => ({ ...(p ?? data!.profile.preferences), dateFormat: e.target.value }))}>
+            <select
+              disabled={!prefs}
+              value={prefs?.dateFormat ?? 'MM/DD/YYYY'}
+              onChange={(e) => setPrefs((current) => (current ? { ...current, dateFormat: e.target.value } : current))}
+            >
               <option>MM/DD/YYYY</option><option>DD/MM/YYYY</option><option>YYYY-MM-DD</option>
             </select>
           </label>
           <label>Default landing page
-            <select value={prefs?.landingPage ?? 'Overview'} onChange={(e) => setPrefs((p) => ({ ...(p ?? data!.profile.preferences), landingPage: e.target.value }))}>
+            <select
+              disabled={!prefs}
+              value={prefs?.landingPage ?? 'Overview'}
+              onChange={(e) => setPrefs((current) => (current ? { ...current, landingPage: e.target.value } : current))}
+            >
               <option>Overview</option><option>Assets</option><option>Maintenance</option><option>Reports</option>
             </select>
           </label>
           <label>Table density
-            <select value={prefs?.tableDensity ?? 'Comfortable'} onChange={(e) => setPrefs((p) => ({ ...(p ?? data!.profile.preferences), tableDensity: e.target.value }))}>
+            <select
+              disabled={!prefs}
+              value={prefs?.tableDensity ?? 'Comfortable'}
+              onChange={(e) => setPrefs((current) => (current ? { ...current, tableDensity: e.target.value } : current))}
+            >
               <option>Comfortable</option><option>Compact</option>
             </select>
           </label>
           <label>Theme
-            <select value={prefs?.theme ?? 'Light'} onChange={(e) => setPrefs((p) => ({ ...(p ?? data!.profile.preferences), theme: e.target.value }))}>
+            <select
+              disabled={!prefs}
+              value={prefs?.theme ?? 'Light'}
+              onChange={(e) => setPrefs((current) => (current ? { ...current, theme: e.target.value } : current))}
+            >
               <option>Light</option><option>Dark</option><option>System</option>
             </select>
           </label>
@@ -353,41 +383,242 @@ export function WiredSecuritySettings({ onAnnounce }: { onAnnounce: Announce }) 
   )
 }
 
-export function WiredBrandingSettings({ onAnnounce }: { onAnnounce: Announce }) {
-  const { data, patchSection } = useWorkspaceSettings()
-  const org = data?.organization
-  const [color, setColor] = useState('')
-  const [domain, setDomain] = useState('')
-  const [name, setName] = useState('')
-  useEffect(() => {
-    if (!org) return
-    setColor(org.primaryColor)
-    setDomain(org.customDomain ?? '')
-    setName(org.name)
-  }, [org])
+type BrandingPayload = {
+  name: string
+  primaryColor: string
+  logoUrl: string | null
+  customDomain: string
+  isAdmin: boolean
+}
 
-  async function save() {
-    try {
-      await patchSection('branding', { primaryColor: color, customDomain: domain, name })
-      onAnnounce('Branding saved.')
-    } catch (error) {
-      onAnnounce(error instanceof Error ? error.message : 'Could not save branding.')
+const DEFAULT_BRAND_COLOR = '#2FA391'
+
+function normalizeHexColor(value: string): string | null {
+  const cleaned = value.trim().replace(/^#/, '')
+  if (/^[0-9a-fA-F]{6}$/.test(cleaned)) return `#${cleaned.toLowerCase()}`
+  if (/^[0-9a-fA-F]{3}$/.test(cleaned)) {
+    return `#${cleaned.split('').map((char) => char + char).join('').toLowerCase()}`
+  }
+  return null
+}
+
+function BrandingColorField({
+  color,
+  onChange,
+  disabled,
+}: {
+  color: string
+  onChange: (hex: string) => void
+  disabled?: boolean
+}) {
+  const resolvedColor = normalizeHexColor(color) ?? DEFAULT_BRAND_COLOR
+  const [hexDraft, setHexDraft] = useState(resolvedColor)
+
+  useEffect(() => {
+    setHexDraft(normalizeHexColor(color) ?? DEFAULT_BRAND_COLOR)
+  }, [color])
+
+  function commitHex(value: string) {
+    const normalized = normalizeHexColor(value)
+    if (normalized) {
+      setHexDraft(normalized)
+      onChange(normalized)
+      return
     }
+    setHexDraft(resolvedColor)
   }
 
   return (
-    <SettingsCard title="Organization identity" description="Your logo and colors appear on shared reports and the login screen." action={<button className="button primary small" onClick={() => void save()} disabled={!data?.profile.isAdmin}>Save changes</button>}>
+    <div className="color-field-row">
+      <input
+        type="color"
+        value={resolvedColor}
+        onChange={(event) => onChange(event.target.value)}
+        className="color-input"
+        disabled={disabled}
+        aria-label="Pick primary color"
+      />
+      <div className="color-hex-input-wrap">
+        <span className="color-swatch" style={{ background: resolvedColor }} aria-hidden />
+        <input
+          type="text"
+          className="color-hex-input"
+          value={hexDraft}
+          onChange={(event) => {
+            let next = event.target.value
+            if (next && !next.startsWith('#')) next = `#${next}`
+            setHexDraft(next)
+            const normalized = normalizeHexColor(next)
+            if (normalized) onChange(normalized)
+          }}
+          onBlur={() => commitHex(hexDraft)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commitHex(hexDraft)
+              event.currentTarget.blur()
+            }
+          }}
+          disabled={disabled}
+          spellCheck={false}
+          autoComplete="off"
+          inputMode="text"
+          placeholder={DEFAULT_BRAND_COLOR}
+          aria-label="Primary color hex code"
+        />
+      </div>
+    </div>
+  )
+}
+
+function applyBrandingState(payload: BrandingPayload, setters: {
+  setName: (value: string) => void
+  setColor: (value: string) => void
+  setDomain: (value: string) => void
+  setLogoUrl: (value: string | null) => void
+  setIsAdmin: (value: boolean) => void
+}) {
+  setters.setName(payload.name)
+  setters.setColor(payload.primaryColor)
+  setters.setDomain(payload.customDomain)
+  setters.setLogoUrl(payload.logoUrl)
+  setters.setIsAdmin(payload.isAdmin)
+}
+
+export function WiredBrandingSettings({ onAnnounce }: { onAnnounce: Announce }) {
+  const { refresh } = useWorkspaceSettings()
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [color, setColor] = useState('#2FA391')
+  const [domain, setDomain] = useState('')
+  const [name, setName] = useState('')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadBranding() {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const response = await fetch('/api/settings/branding')
+        const payload = (await response.json()) as BrandingPayload & { error?: string }
+        if (!response.ok) throw new Error(payload.error ?? 'Could not load branding.')
+        if (cancelled) return
+        applyBrandingState(payload, { setName, setColor, setDomain, setLogoUrl, setIsAdmin })
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : 'Could not load branding.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void loadBranding()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/settings/branding', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ primaryColor: color, customDomain: domain, name, logoUrl }),
+      })
+      const payload = (await response.json()) as BrandingPayload & { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Could not save branding.')
+      applyBrandingState(payload, { setName, setColor, setDomain, setLogoUrl, setIsAdmin })
+      window.dispatchEvent(new CustomEvent('workspace-branding-updated'))
+      void refresh()
+      onAnnounce('Branding saved.')
+    } catch (error) {
+      onAnnounce(error instanceof Error ? error.message : 'Could not save branding.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function uploadLogo(file: File) {
+    setUploadingLogo(true)
+    try {
+      const body = new FormData()
+      body.append('logo', file)
+      const response = await fetch('/api/settings/branding/logo', { method: 'POST', body })
+      const payload = (await response.json()) as { logoUrl?: string; error?: string }
+      if (!response.ok) throw new Error(payload.error ?? 'Could not upload logo.')
+      setLogoUrl(payload.logoUrl ?? null)
+      window.dispatchEvent(new CustomEvent('workspace-branding-updated'))
+      void refresh()
+      onAnnounce('Logo updated.')
+    } catch (error) {
+      onAnnounce(error instanceof Error ? error.message : 'Could not upload logo.')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  if (loading) {
+    return <EmptyState title="Loading branding…" description="Fetching your organization identity." />
+  }
+
+  if (loadError) {
+    return (
+      <EmptyState
+        title="Could not load branding"
+        description={loadError.includes('primary_color') || loadError.includes('logo_url') || loadError.includes('custom_domain')
+          ? `${loadError} Apply the workspace settings migration (20260914220000_workspace_settings_wiring.sql) in Supabase, then reload.`
+          : loadError}
+        ctaLabel="Try again"
+        onCta={() => window.location.reload()}
+      />
+    )
+  }
+
+  return (
+    <SettingsCard title="Organization identity" description="Your logo and name appear in the workspace sidebar and on shared reports." action={<button className="button primary small" onClick={() => void save()} disabled={!isAdmin || saving}>{saving ? 'Saving…' : 'Save changes'}</button>}>
+      {!isAdmin ? (
+        <p className="table-muted settings-card-body-note">
+          Only organization admins can change branding. Contact an admin if you need updates.
+        </p>
+      ) : null}
       <div className="branding-layout">
         <div className="branding-form">
-          <label>Organization name<input value={name} onChange={(e) => setName(e.target.value)} disabled={!data?.profile.isAdmin} /></label>
-          <label>Primary color<input type="color" value={color || '#2FA391'} onChange={(e) => setColor(e.target.value)} className="color-input" disabled={!data?.profile.isAdmin} /></label>
-          <label>Custom domain<input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="assets.yourcompany.com" disabled={!data?.profile.isAdmin} /></label>
+          <label>
+            Logo
+            <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={!isAdmin || uploadingLogo} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadLogo(file); event.target.value = '' }} />
+            <button type="button" className="small-dropzone" disabled={!isAdmin || uploadingLogo} onClick={() => logoInputRef.current?.click()}>
+              <ImagePlus size={20} />
+              <span>{uploadingLogo ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}</span>
+            </button>
+            {logoUrl ? (
+              <button type="button" className="text-button" disabled={!isAdmin} onClick={() => { setLogoUrl(null) }}>
+                Remove logo
+              </button>
+            ) : null}
+          </label>
+          <label>Organization name<input value={name} onChange={(e) => setName(e.target.value)} disabled={!isAdmin} /></label>
+          <label>
+            Primary color
+            <BrandingColorField color={color} onChange={setColor} disabled={!isAdmin} />
+          </label>
+          <label>Custom domain<input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="assets.yourcompany.com" disabled={!isAdmin} /></label>
         </div>
         <div className="branding-preview">
-          <span className="table-muted">Live preview</span>
+          <span className="table-muted">Sidebar preview</span>
+          <div className="branding-preview-card branding-preview-sidebar">
+            <OrgBrandMark brand={{ name: name || 'Workspace', logoUrl, primaryColor: color || '#2FA391' }} />
+          </div>
+          <span className="table-muted">Sign-in preview</span>
           <div className="branding-preview-card">
-            <div className="brand-mark" style={{ background: color || '#2FA391' }}>{name.slice(0, 1).toUpperCase() || 'A'}</div>
-            <strong>{name || 'Workspace'}</strong>
+            <OrgBrandMark brand={{ name: name || 'Workspace', logoUrl, primaryColor: color || '#2FA391', tagline: 'Asset operations' }} />
             <button className="button small" style={{ background: color || '#2FA391', color: '#fff' }}>Sign in</button>
           </div>
         </div>
@@ -469,7 +700,7 @@ export function WiredRolesSettings({ onAnnounce }: { onAnnounce: Announce }) {
 
   return (
     <>
-      <SettingsCard title="Feature permissions" description="Toggle access by role. Owners and admins retain full access." action={<button className="button primary small" onClick={() => void savePermissions()} disabled={!data?.profile.isAdmin}>Save changes</button>}>
+      <SettingsCard flush title="Feature permissions" description="Toggle access by role. Owners and admins retain full access." action={<button className="button primary small" onClick={() => void savePermissions()} disabled={!data?.profile.isAdmin}>Save changes</button>}>
         {permissions.map((row) => (
           <div className="permission-row" key={row.id}>
             <div><strong>{row.label}</strong><span>{row.description}</span></div>
@@ -482,7 +713,7 @@ export function WiredRolesSettings({ onAnnounce }: { onAnnounce: Announce }) {
           </div>
         ))}
       </SettingsCard>
-      <SettingsCard title="Predefined roles" description="Built-in roles available to every workspace.">
+      <SettingsCard flush title="Predefined roles" description="Built-in roles available to every workspace.">
         <div className="predefined-role-list">
           {predefinedRoles.map((role) => (
             <div className="predefined-role-row" key={role.name}><div><strong>{role.name}</strong><span>{role.description}</span></div></div>
@@ -716,7 +947,7 @@ export function WiredDeveloperSettings({ onAnnounce }: { onAnnounce: Announce })
     <>
       {revealedKey && (
         <SettingsCard title="New API key" description="Copy this key now. It will not be shown again.">
-          <code className="mono">{revealedKey}</code>
+          <code className="mono-muted">{revealedKey}</code>
         </SettingsCard>
       )}
       <SettingsCard title="API keys" description="Use these keys to read and write asset data programmatically." action={<button className="button primary small" onClick={() => void generateKey()} disabled={!data?.profile.isAdmin}><Plus size={14} /> Generate key</button>}>
@@ -727,10 +958,10 @@ export function WiredDeveloperSettings({ onAnnounce }: { onAnnounce: Announce })
           { key: 'revoke', header: '', render: (r) => <button className="text-button" onClick={() => void deleteSection('api-keys', r.id).then(() => onAnnounce('Key revoked.'))}><Trash2 size={13} /> Revoke</button> },
         ]} />
       </SettingsCard>
-      <SettingsCard title="Webhook endpoints" description="AssetGriffin will POST asset events to these URLs." action={<button className="button secondary small" onClick={() => void addWebhook()} disabled={!data?.profile.isAdmin}><Plus size={14} /> Add endpoint</button>}>
+      <SettingsCard flush title="Webhook endpoints" description="AssetGriffin will POST asset events to these URLs." action={<button className="button secondary small" onClick={() => void addWebhook()} disabled={!data?.profile.isAdmin}><Plus size={14} /> Add endpoint</button>}>
         {(data?.webhooks ?? []).length ? (data?.webhooks ?? []).map((hook) => (
           <div className="webhook-row" key={hook.id}>
-            <span className="mono">{hook.url}</span>
+            <span className="mono-muted">{hook.url}</span>
             <StatusBadge status={hook.active ? 'Active' : 'Retired'} />
             <button className="text-button" onClick={() => void deleteSection('webhooks', hook.id)}>Remove</button>
           </div>

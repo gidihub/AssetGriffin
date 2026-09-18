@@ -46,6 +46,10 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react'
+import { ExportModal } from '@/components/workspace/export-modal'
+import { SettingsSubnav } from '@/components/workspace/settings-nav'
+import { generateAuditExport } from '@/lib/audit-export'
+import { downloadRecordExport, type RecordExportOptions } from '@/lib/record-export'
 import { FieldsSettings } from '@/components/workspace/fields-settings'
 import { GroupsSettings } from '@/components/workspace/groups-settings'
 import { GriffinBillingCredits } from '@/components/workspace/griffin-billing-credits'
@@ -109,7 +113,7 @@ function SettingsHero({ section }: { section: string }) {
   )
 }
 
-function SettingsCard({ title, description, action, children }: { title: string; description?: string; action?: React.ReactNode; children: React.ReactNode }) {
+function SettingsCard({ title, description, action, children, flush }: { title: string; description?: string; action?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
   return (
     <div className="settings-card">
       <div className="settings-card-header">
@@ -119,7 +123,7 @@ function SettingsCard({ title, description, action, children }: { title: string;
         </div>
         {action}
       </div>
-      {children}
+      {flush ? children : <div className="settings-card-body">{children}</div>}
     </div>
   )
 }
@@ -151,15 +155,7 @@ function ProfileSettings({ onAnnounce }: { onAnnounce: Announce }) {
 }
 
 // ---------- Billing ----------
-function BillingSettings({
-  onAnnounce,
-  creditPurchaseNotice,
-  checkoutSessionId,
-}: {
-  onAnnounce: Announce
-  creditPurchaseNotice?: 'cancelled' | null
-  checkoutSessionId?: string | null
-}) {
+function BillingSettings({ onAnnounce }: { onAnnounce: Announce }) {
   const invoices = [
     { id: 'INV-2026-08', date: 'Aug 1, 2026', amount: '$499.00', status: 'Paid' },
     { id: 'INV-2026-07', date: 'Jul 1, 2026', amount: '$499.00', status: 'Paid' },
@@ -185,7 +181,7 @@ function BillingSettings({
           <div className="field-item"><span>Payment method</span><strong>Visa ending 4471</strong></div>
         </div>
       </SettingsCard>
-      <GriffinBillingCredits purchaseNotice={creditPurchaseNotice} checkoutSessionId={checkoutSessionId} />
+      <GriffinBillingCredits />
       <SettingsCard title="Invoice history" description="Download past invoices for your records.">
         <DataTable
           rows={invoices.map((inv) => ({ ...inv }))}
@@ -213,7 +209,7 @@ function NotificationsSettings({ onAnnounce }: { onAnnounce: Announce }) {
     { key: 'warrantyExpiring', label: 'Warranty expiring', description: 'Alert me 30 days before an asset warranty expires.' },
   ]
   return (
-    <SettingsCard title="Alert preferences" description="Changes apply to your account across the Summit Tech workspace." action={<button className="button primary small" onClick={() => onAnnounce('Notification preferences saved.')}>Save changes</button>}>
+    <SettingsCard flush title="Alert preferences" description="Changes apply to your account across the Summit Tech workspace." action={<button className="button primary small" onClick={() => onAnnounce('Notification preferences saved.')}>Save changes</button>}>
       {rows.map((row) => (
         <ToggleRow key={row.key} label={row.label} description={row.description} checked={state[row.key]} onChange={(checked) => setState((s) => ({ ...s, [row.key]: checked }))} />
       ))}
@@ -454,13 +450,13 @@ function DeveloperSettings({ onAnnounce }: { onAnnounce: Announce }) {
           ]}
         />
       </SettingsCard>
-      <SettingsCard title="Webhook endpoints" description="AssetGriffin will POST asset events to these URLs." action={<button className="button secondary small" onClick={() => onAnnounce('Webhook form opened.')}><Plus size={14} /> Add endpoint</button>}>
+      <SettingsCard flush title="Webhook endpoints" description="AssetGriffin will POST asset events to these URLs." action={<button className="button secondary small" onClick={() => onAnnounce('Webhook form opened.')}><Plus size={14} /> Add endpoint</button>}>
         <div className="webhook-row">
-          <span className="mono">https://hooks.summittech.com/assetgriffin/assets</span>
+          <span className="mono-muted">https://hooks.summittech.com/assetgriffin/assets</span>
           <StatusBadge status="Active" />
         </div>
         <div className="webhook-row">
-          <span className="mono">https://hooks.summittech.com/assetgriffin/audits</span>
+          <span className="mono-muted">https://hooks.summittech.com/assetgriffin/audits</span>
           <StatusBadge status="Active" />
         </div>
       </SettingsCard>
@@ -689,7 +685,7 @@ function RolesSettings({ onAnnounce }: { onAnnounce: Announce }) {
 
   return (
     <>
-      <SettingsCard title="Feature permissions" description="Toggle access by role. Owners and admins retain full access." action={<button className="button primary small" onClick={() => onAnnounce('Permissions saved.')}>Save changes</button>}>
+      <SettingsCard flush title="Feature permissions" description="Toggle access by role. Owners and admins retain full access." action={<button className="button primary small" onClick={() => onAnnounce('Permissions saved.')}>Save changes</button>}>
         {permissions.map((label, index) => (
           <div className="permission-row" key={label}>
             <div>
@@ -708,7 +704,7 @@ function RolesSettings({ onAnnounce }: { onAnnounce: Announce }) {
         ))}
       </SettingsCard>
 
-      <SettingsCard title="Predefined roles" description="Built-in roles available to every workspace. These cannot be edited or removed.">
+      <SettingsCard flush title="Predefined roles" description="Built-in roles available to every workspace. These cannot be edited or removed.">
         <div className="predefined-role-list">
           {predefinedRoles.map((role) => <PredefinedRoleRow key={role.name} {...role} />)}
         </div>
@@ -856,6 +852,7 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showExportModal, setShowExportModal] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -910,11 +907,44 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
     source: event.source,
   }))
 
+  async function handleAuditExport(options: RecordExportOptions) {
+    const params = new URLSearchParams({ export: '1', limit: '5000' })
+    if (tab !== 'all') params.set('category', tab)
+
+    const response = await fetch(`/api/audit-log?${params.toString()}`)
+    const data = (await response.json()) as { events?: DbAuditLogRow[]; error?: string }
+    if (!response.ok) throw new Error(data.error ?? 'Could not load activity for export.')
+
+    const exportEvents = (data.events ?? []).filter(
+      (event) =>
+        (!userFilter || event.actor_label === userFilter) &&
+        (!actionFilter || event.action === actionFilter),
+    )
+
+    const { blob, filename } = await generateAuditExport(exportEvents, options.format)
+    downloadRecordExport(blob, filename)
+    onAnnounce(`Exported ${exportEvents.length} activity events as ${options.format.toUpperCase()}.`)
+  }
+
   return (
+    <>
     <SettingsCard
       title="Activity timeline"
       description="Every important action across your workspace, retained for 12 months."
-      action={<button className="button secondary small" onClick={() => onAnnounce('Audit log exported.')}><ArrowDownToLine size={14} /> Export log</button>}
+      action={
+        <button
+          className="button secondary small"
+          onClick={() => {
+            if (!filtered.length) {
+              onAnnounce('No activity to export.')
+              return
+            }
+            setShowExportModal(true)
+          }}
+        >
+          <ArrowDownToLine size={14} /> Export log
+        </button>
+      }
     >
       <div className="intake-mode-tabs audit-tabs" role="tablist" aria-label="Log category">
         {AUDIT_TABS.map((auditTab) => (
@@ -932,7 +962,7 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
         ))}
       </div>
 
-      <div className="table-toolbar list-toolbar" style={{ paddingLeft: 0, paddingRight: 0 }}>
+      <div className="table-toolbar list-toolbar">
         <select className="filter-select" value={userFilter} onChange={(e) => setUserFilter(e.target.value)} aria-label="Filter by user">
           <option value="">User</option>
           {Array.from(new Set(events.map((e) => e.actor_label).filter(Boolean))).map((u) => <option key={u} value={u}>{u}</option>)}
@@ -963,6 +993,29 @@ function AuditLogSettings({ onAnnounce }: { onAnnounce: Announce }) {
         />
       )}
     </SettingsCard>
+
+    {showExportModal ? (
+      <ExportModal
+        title="Export activity log"
+        summary={
+          <>
+            Export <strong>{filtered.length}</strong>{' '}
+            {filtered.length === 1 ? 'event' : 'events'}
+            {tab !== 'all' ? (
+              <>
+                {' '}
+                from <strong>{AUDIT_TABS.find((auditTab) => auditTab.id === tab)?.label ?? tab}</strong>
+              </>
+            ) : null}
+            {userFilter || actionFilter ? ' matching your current filters' : ''}.
+          </>
+        }
+        includeTabularOption={false}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleAuditExport}
+      />
+    ) : null}
+    </>
   )
 }
 
@@ -971,43 +1024,50 @@ export function SettingsSection({
   onAnnounce,
   onNavigateSection,
   onStartOnboarding,
-  creditPurchaseNotice,
-  checkoutSessionId,
+  userName,
+  userEmail,
+  userInitials,
 }: {
   section: string
   onAnnounce: Announce
   onNavigateSection?: (section: string) => void
   onStartOnboarding?: () => void
-  creditPurchaseNotice?: 'cancelled' | null
-  checkoutSessionId?: string | null
+  userName: string
+  userEmail: string
+  userInitials: string
 }) {
   return (
     <SettingsProvider>
-      <div className="settings-page">
-        <SettingsHero section={section} />
-        {section === 'Profile' && <WiredProfileSettings onAnnounce={onAnnounce} />}
-        {section === 'Billing' && (
-          <WiredBillingSettings
-            onAnnounce={onAnnounce}
-            creditPurchaseNotice={creditPurchaseNotice}
-            checkoutSessionId={checkoutSessionId}
-          />
-        )}
-        {section === 'Notifications' && <WiredNotificationsSettings onAnnounce={onAnnounce} />}
-        {section === 'Preferences' && <WiredPreferencesSettings onAnnounce={onAnnounce} onStartOnboarding={onStartOnboarding} />}
-        {section === 'Security' && <WiredSecuritySettings onAnnounce={onAnnounce} />}
-        {section === 'Integrations' && <WiredIntegrationsSettings onAnnounce={onAnnounce} onNavigateSection={onNavigateSection} />}
-        {section === 'Developer' && <WiredDeveloperSettings onAnnounce={onAnnounce} />}
-        {section === 'Branding' && <WiredBrandingSettings onAnnounce={onAnnounce} />}
-        {section === 'Spending limits' && <WiredSpendingLimitsSettings onAnnounce={onAnnounce} />}
-        {section === 'Roles & permissions' && <WiredRolesSettings onAnnounce={onAnnounce} />}
-        {section === 'Approval groups' && <WiredApprovalGroupsSettings onAnnounce={onAnnounce} />}
-        {section === 'Groups' && <GroupsSettings onAnnounce={onAnnounce} />}
-        {section === 'Fields' && <FieldsSettings onAnnounce={onAnnounce} />}
-        {section === 'Team' && <WiredTeamSettings onAnnounce={onAnnounce} />}
-        {section === 'Departments' && <WiredDepartmentsSettings onAnnounce={onAnnounce} />}
-        {section === 'Workflows' && <WiredWorkflowsSettings onAnnounce={onAnnounce} />}
-        {section === 'Audit log' && <AuditLogSettings onAnnounce={onAnnounce} />}
+      <div className="settings-shell">
+        <SettingsSubnav
+          activeSection={section}
+          onSelectSection={(nextSection) => onNavigateSection?.(nextSection)}
+          userName={userName}
+          userEmail={userEmail}
+          userInitials={userInitials}
+        />
+        <div className="settings-main">
+          <div className="settings-page">
+            <SettingsHero section={section} />
+            {section === 'Profile' && <WiredProfileSettings onAnnounce={onAnnounce} />}
+            {section === 'Billing' && <WiredBillingSettings onAnnounce={onAnnounce} />}
+            {section === 'Notifications' && <WiredNotificationsSettings onAnnounce={onAnnounce} />}
+            {section === 'Preferences' && <WiredPreferencesSettings onAnnounce={onAnnounce} onStartOnboarding={onStartOnboarding} />}
+            {section === 'Security' && <WiredSecuritySettings onAnnounce={onAnnounce} />}
+            {section === 'Integrations' && <WiredIntegrationsSettings onAnnounce={onAnnounce} onNavigateSection={onNavigateSection} />}
+            {section === 'Developer' && <WiredDeveloperSettings onAnnounce={onAnnounce} />}
+            {section === 'Branding' && <WiredBrandingSettings onAnnounce={onAnnounce} />}
+            {section === 'Spending limits' && <WiredSpendingLimitsSettings onAnnounce={onAnnounce} />}
+            {section === 'Roles & permissions' && <WiredRolesSettings onAnnounce={onAnnounce} />}
+            {section === 'Approval groups' && <WiredApprovalGroupsSettings onAnnounce={onAnnounce} />}
+            {section === 'Groups' && <GroupsSettings onAnnounce={onAnnounce} />}
+            {section === 'Fields' && <FieldsSettings onAnnounce={onAnnounce} />}
+            {section === 'Team' && <WiredTeamSettings onAnnounce={onAnnounce} />}
+            {section === 'Departments' && <WiredDepartmentsSettings onAnnounce={onAnnounce} />}
+            {section === 'Workflows' && <WiredWorkflowsSettings onAnnounce={onAnnounce} />}
+            {section === 'Audit log' && <AuditLogSettings onAnnounce={onAnnounce} />}
+          </div>
+        </div>
       </div>
     </SettingsProvider>
   )

@@ -32,6 +32,8 @@ export type ToolContext = {
   organizationId: string
   /** Shown in generated report headers when available. */
   organizationName?: string
+  /** Cached per request to avoid repeated dictionary lookups. */
+  orgDataDictionary?: OrgDataDictionary
 }
 
 export type ToolTable = {
@@ -905,21 +907,29 @@ export type OrgDataDictionary = {
 }
 
 export async function getOrgDataDictionary(ctx: ToolContext): Promise<OrgDataDictionary> {
+  if (ctx.orgDataDictionary) return ctx.orgDataDictionary
+
   await resolveAssetsGroupId(ctx)
-  const { count, error: countError } = await assetRecordsQuery(ctx, 'id', { count: 'exact', head: true })
-  if (countError) throw new Error(countError.message)
+  const { data, error } = await ctx.supabase.rpc('get_org_asset_dictionary', {
+    p_organization_id: ctx.organizationId,
+  })
+  if (error) throw new Error(error.message)
 
-  const rows = await fetchAllAssetRecords(ctx)
-  const distinct = (key: keyof Pick<AssetRow, 'category' | 'location' | 'status' | 'assigned_to'>) =>
-    Array.from(
-      new Set(rows.map((row) => row[key]).filter((value): value is string => Boolean(value?.trim()))),
-    ).sort()
-
-  return {
-    totalAssets: count ?? rows.length,
-    categories: distinct('category'),
-    locations: distinct('location'),
-    statuses: distinct('status'),
-    owners: distinct('assigned_to'),
+  const payload = (data ?? {}) as {
+    total_assets?: number
+    categories?: string[]
+    locations?: string[]
+    statuses?: string[]
+    owners?: string[]
   }
+
+  const dictionary: OrgDataDictionary = {
+    totalAssets: Number(payload.total_assets ?? 0),
+    categories: payload.categories ?? [],
+    locations: payload.locations ?? [],
+    statuses: payload.statuses ?? [],
+    owners: payload.owners ?? [],
+  }
+  ctx.orgDataDictionary = dictionary
+  return dictionary
 }
