@@ -22,8 +22,17 @@ export function NotificationsPopover({
 }: NotificationsPopoverProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const previousOpenRef = useRef(false)
   const signature = notificationSignature(notifications)
   const hasUnread = notifications.length > 0 && signature !== acknowledgedSignature
+
+  useEffect(() => {
+    const wasOpen = previousOpenRef.current
+    previousOpenRef.current = open
+    if (open && !wasOpen) {
+      onAcknowledge(signature)
+    }
+  }, [open, signature, onAcknowledge])
 
   useEffect(() => {
     if (!open) return
@@ -47,11 +56,7 @@ export function NotificationsPopover({
   }, [open])
 
   function handleToggle() {
-    setOpen((current) => {
-      const next = !current
-      if (next) onAcknowledge(signature)
-      return next
-    })
+    setOpen((current) => !current)
   }
 
   return (
