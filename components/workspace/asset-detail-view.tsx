@@ -13,7 +13,9 @@ import {
   Trash2,
   Wrench,
   X,
+  ZoomIn,
 } from 'lucide-react'
+import { AssetPhotoLightbox } from '@/components/workspace/asset-photo-lightbox'
 import { RecordFieldInput, LifecycleDatesEditor } from './record-field-input'
 import { assetPhotoDisplayUrl, stripPhotoForStorage, type StoredAssetPhoto } from '@/lib/asset-photo-storage'
 import {
@@ -138,6 +140,7 @@ export function AssetDetailView({
   const [showAuditForm, setShowAuditForm] = useState(false)
   const [showWarrantyForm, setShowWarrantyForm] = useState(false)
   const [savingPhotos, setSavingPhotos] = useState(false)
+  const [expandedPhoto, setExpandedPhoto] = useState<AssetPhoto | null>(null)
   const [editingDetails, setEditingDetails] = useState(false)
   const [draftData, setDraftData] = useState<Record<string, unknown>>({})
   const [savingDetails, setSavingDetails] = useState(false)
@@ -493,6 +496,7 @@ export function AssetDetailView({
           throw new Error(payload.error ?? 'Could not delete photo file.')
         }
       }
+      if (expandedPhoto?.id === photo.id) setExpandedPhoto(null)
       await savePhotos(photos.filter((entry) => entry.id !== photo.id))
     } catch (error) {
       onAnnounce(error instanceof Error ? error.message : 'Could not remove photo.')
@@ -773,9 +777,30 @@ export function AssetDetailView({
               <div className="intake-photo-gallery asset-photo-gallery">
                 {photos.map((photo, index) => (
                   <div key={photo.id} className={`intake-photo-card ${photo.primary ? 'is-primary' : ''}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photoDisplaySrc(localRecord.id, photo)} alt={`Asset photo ${index + 1}`} />
-                    {photo.primary ? <span className="intake-photo-primary">Primary</span> : null}
+                    <div className="asset-photo-thumb-wrap">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photoDisplaySrc(localRecord.id, photo)} alt={`Asset photo ${index + 1}`} />
+                      {photo.primary ? <span className="intake-photo-primary">Primary</span> : null}
+                      <div className="asset-photo-overlay-actions">
+                        <button
+                          type="button"
+                          className="asset-photo-zoom-btn"
+                          aria-label={`Expand ${photo.name}`}
+                          onClick={() => setExpandedPhoto(photo)}
+                        >
+                          <ZoomIn size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="asset-photo-delete-btn"
+                          aria-label={`Delete ${photo.name}`}
+                          disabled={savingPhotos}
+                          onClick={() => void removePhoto(photo)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
                     <div className="asset-photo-card-actions">
                       {!photo.primary ? (
                         <button
@@ -789,14 +814,6 @@ export function AssetDetailView({
                       ) : (
                         <span className="asset-photo-primary-label">Header photo</span>
                       )}
-                      <button
-                        type="button"
-                        className="intake-photo-remove"
-                        aria-label={`Remove ${photo.name}`}
-                        onClick={() => void removePhoto(photo)}
-                      >
-                        <X size={14} />
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -810,6 +827,13 @@ export function AssetDetailView({
                 onCta={() => document.querySelector<HTMLInputElement>('.asset-photo-add input')?.click()}
               />
             )}
+            {expandedPhoto ? (
+              <AssetPhotoLightbox
+                src={photoDisplaySrc(localRecord.id, expandedPhoto)}
+                alt={expandedPhoto.name}
+                onClose={() => setExpandedPhoto(null)}
+              />
+            ) : null}
           </div>
         )}
 

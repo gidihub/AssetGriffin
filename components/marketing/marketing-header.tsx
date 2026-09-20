@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { ASSET_GRIFFIN_LOGO } from '@/lib/brand-assets'
 import { useState, useRef } from 'react'
 import {
   Menu,
@@ -489,7 +490,7 @@ export function MarketingHeader() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
           <Image
-            src="/images/assetgriffin-logo.png"
+            src={ASSET_GRIFFIN_LOGO}
             alt="AssetGriffin logo"
             width={32}
             height={32}

@@ -1,0 +1,3 @@
+name,team,role,department,email,phone,status,last_check_out,employee_id,title,site,location,notes
+Jane Doe,Platform,IT Admin,Engineering,jane.doe@example.com,+1 555-0100,Active,,EMP-1042,Systems Administrator,HQ,Floor 2,
+Alex Kim,Field Ops,Technician,Operations,alex.kim@example.com,+1 555-0101,Invited,,EMP-2088,Field Technician,East Branch,,

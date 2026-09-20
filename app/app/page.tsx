@@ -40,7 +40,14 @@ import { type GriffinEyeNavTarget, type GriffinEyeObservation } from '@/lib/grif
 import type { DataGapSummary } from '@/lib/griffineye-agent/tools'
 import type { DbAuditLogRow } from '@/lib/griffineye-audit'
 import { onboardingTemplates } from '@/lib/onboarding-templates'
+import { NotificationsPopover } from '@/components/workspace/notifications-popover'
 import { SidebarProfileMenu } from '@/components/workspace/sidebar-profile-menu'
+import {
+  buildWorkspaceNotifications,
+  readAcknowledgedNotificationSignature,
+  type WorkspaceNotification,
+  writeAcknowledgedNotificationSignature,
+} from '@/lib/workspace-notifications'
 import { invalidateGroupPage } from '@/lib/group-page-cache'
 import { normalizeRecordRef } from '@/lib/record-mappers'
 import { saveIntakeAsset } from '@/lib/save-intake-asset'
@@ -141,6 +148,8 @@ export default function Page() {
   const [griffinEyeObservations, setGriffinEyeObservations] = useState<GriffinEyeObservation[]>([])
   const [overviewAssets, setOverviewAssets] = useState<AssetRecord[]>([])
   const [auditEvents, setAuditEvents] = useState<DbAuditLogRow[]>([])
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
+  const [acknowledgedNotificationSignature, setAcknowledgedNotificationSignature] = useState('')
   const [workspaceName, setWorkspaceName] = useState('Workspace')
   const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null)
   const [orgPrimaryColor, setOrgPrimaryColor] = useState('#2FA391')
@@ -202,10 +211,13 @@ export default function Page() {
       if (workspaceResult.status === 'fulfilled' && workspaceResult.value.ok) {
         const workspace = (await workspaceResult.value.json()) as {
           profile?: { fullName?: string | null; email?: string; role?: string }
-          organization?: { name?: string; logoUrl?: string | null; primaryColor?: string }
+          organization?: { id?: string; name?: string; logoUrl?: string | null; primaryColor?: string }
         }
         const fullName = workspace.profile?.fullName?.trim() ?? ''
         const email = workspace.profile?.email ?? ''
+        const nextOrganizationId = workspace.organization?.id ?? null
+        setOrganizationId(nextOrganizationId)
+        setAcknowledgedNotificationSignature(readAcknowledgedNotificationSignature(nextOrganizationId))
         setWorkspaceName(workspace.organization?.name ?? 'Workspace')
         setOrgLogoUrl(workspace.organization?.logoUrl ?? null)
         setOrgPrimaryColor(workspace.organization?.primaryColor ?? '#2FA391')
@@ -295,10 +307,26 @@ export default function Page() {
   const inUsePercent = totalAssets > 0 ? Math.round((inUseCount / totalAssets) * 100) : 0
   const attentionCount = maintenanceCount + dataHealth.reduce((sum, gap) => sum + gap.missing, 0)
   const previewAssets = filteredAssets.slice(0, 8)
+  const workspaceNotifications = useMemo(
+    () =>
+      buildWorkspaceNotifications({
+        maintenanceCount,
+        dataHealth,
+        observations: griffinEyeObservations,
+        auditEvents,
+        formatRelativeTime,
+      }),
+    [maintenanceCount, dataHealth, griffinEyeObservations, auditEvents],
+  )
 
   function announce(message: string) {
     setToast(message)
     window.setTimeout(() => setToast(''), 2800)
+  }
+
+  function acknowledgeNotifications(signature: string) {
+    setAcknowledgedNotificationSignature(signature)
+    writeAcknowledgedNotificationSignature(organizationId, signature)
   }
 
   async function applyOnboardingTemplate(templateId: OnboardingTemplateId) {
@@ -383,6 +411,25 @@ export default function Page() {
       message += ` ${photos.failed.length} photo${photos.failed.length === 1 ? '' : 's'} could not be downloaded.`
     }
     announce(message)
+  }
+
+  function handleNotificationSelect(notification: WorkspaceNotification) {
+    if (notification.kind === 'maintenance') {
+      openGroupSlug('assets')
+      return
+    }
+    if (notification.kind === 'data-health') {
+      openGroupSlug('assets')
+      return
+    }
+    if (notification.kind === 'griffineye') {
+      const observation = griffinEyeObservations.find((entry) => notification.id === `griffineye-${entry.id}`)
+      if (observation) {
+        handleGriffinEyeNavigate(observation.nav)
+      }
+      return
+    }
+    navigateToSettings('Audit log')
   }
 
   function handleGriffinEyeNavigate(target: GriffinEyeNavTarget) {
@@ -532,8 +579,13 @@ export default function Page() {
             <div className="breadcrumb"><strong>{pageTitle}</strong></div>
           </div>
           <div className="top-actions">
-            <button className="icon-button" aria-label="Notifications" onClick={() => announce('Notifications are not configured yet.')}><Bell size={18} /></button>
-            <div className="top-avatar">{userInitials}</div>
+            <NotificationsPopover
+              notifications={workspaceNotifications}
+              acknowledgedSignature={acknowledgedNotificationSignature}
+              onAcknowledge={acknowledgeNotifications}
+              onSelect={handleNotificationSelect}
+              onOpenSettings={() => navigateToSettings('Notifications')}
+            />
           </div>
         </header>
         <div className={`page-content${activeNav === 'Settings' ? ' page-content-settings' : ''}`}>

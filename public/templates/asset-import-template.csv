@@ -1,0 +1,3 @@
+asset_tag,name,category,assigned_to,location,status,purchase_date,serial,warranty_expiration,depreciation_value,notes,lifecycle_stage,photo_url
+LAP-001,Dell Latitude 5540,Computers,Jane Doe,HQ Floor 2,In use,2024-03-15,SN-DL-5540-001,2027-03-15,$1200,Finance team laptop,Deployed,
+MON-014,Dell U2723QE,Displays,Unassigned,Storage Closet,Available,2023-11-01,SN-MON-2723-014,2026-11-01,$450,Spare monitor,Procurement,

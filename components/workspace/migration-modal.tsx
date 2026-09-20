@@ -1,7 +1,11 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { ArrowUpRight, Check, ChevronDown, CloudUpload, FileSpreadsheet } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, CloudUpload, FileSpreadsheet } from 'lucide-react'
+import {
+  IMPORT_TEMPLATE_FILENAMES,
+  IMPORT_TEMPLATE_PATHS,
+} from '@/lib/import-templates'
 import { GriffinEyeIcon } from '@/components/griffineye/griffineye-icon'
 import { GriffinEyeThinking } from '@/components/griffineye/griffineye-thinking'
 import type { GriffinExtractTargetGroup } from '@/lib/group-import'
@@ -299,6 +303,18 @@ export function MigrationModal({
         </button>
         <small>CSV or Excel up to 5 MB</small>
       </div>
+
+      <p className="import-template-hint">
+        <a
+          href={IMPORT_TEMPLATE_PATHS[targetGroup]}
+          download={IMPORT_TEMPLATE_FILENAMES[targetGroup]}
+          className="import-template-download"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ArrowDownToLine size={14} />
+          Download CSV template
+        </a>
+      </p>
 
       {stage === 'extracting' && <GriffinEyeThinking message="GriffinEye is reviewing column mappings…" />}
 

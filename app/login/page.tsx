@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { LoginForm } from '@/components/auth/login-form'
+import { ASSET_GRIFFIN_LOGO } from '@/lib/brand-assets'
 import { LoginPromoCarousel } from '@/components/auth/login-promo-carousel'
 
 export default async function LoginPage({
@@ -18,7 +19,7 @@ export default async function LoginPage({
             <header className="auth-brand">
               <div className="auth-brand-mark">
                 <Image
-                  src="/images/assetgriffin-logo.png"
+                  src={ASSET_GRIFFIN_LOGO}
                   alt=""
                   width={40}
                   height={40}

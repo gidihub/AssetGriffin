@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { ASSET_GRIFFIN_LOGO } from '@/lib/brand-assets'
 
 const columns = [
   {
@@ -65,7 +66,7 @@ export function MarketingFooter() {
           <div>
             <Link href="/" className="flex items-center gap-2.5">
               <Image
-                src="/images/assetgriffin-logo.png"
+                src={ASSET_GRIFFIN_LOGO}
                 alt="AssetGriffin logo"
                 width={32}
                 height={32}

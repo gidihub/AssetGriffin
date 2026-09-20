@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { ASSET_GRIFFIN_LOGO } from '@/lib/brand-assets'
 
 export type OrgBrand = {
   name: string
@@ -48,7 +49,7 @@ export function PlatformBrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand-lockup${compact ? ' brand-lockup-compact' : ''}`}>
       <Image
-        src="/images/assetgriffin-logo.png"
+        src={ASSET_GRIFFIN_LOGO}
         alt=""
         width={32}
         height={32}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import { ASSET_GRIFFIN_LOGO } from '@/lib/brand-assets'
 import { Check, Upload, X } from 'lucide-react'
 import { GriffinEyeIcon } from '@/components/griffineye/griffineye-icon'
 import { GriffinEyeThinking } from '@/components/griffineye/griffineye-thinking'
@@ -26,7 +27,7 @@ export function TemplateGallery({
       <div className="onboarding-inner">
         <div className="onboarding-header">
           <div className="onboarding-brand">
-            <Image src="/images/assetgriffin-logo.png" alt="AssetGriffin logo" width={28} height={28} className="brand-mark-image" />
+            <Image src={ASSET_GRIFFIN_LOGO} alt="AssetGriffin logo" width={28} height={28} className="brand-mark-image" />
             <span>assetgriffin</span>
           </div>
           <button className="text-button" onClick={onSkip}>Skip for now</button>

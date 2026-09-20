@@ -22,6 +22,7 @@ export async function GET() {
         role: profile.role,
       },
       organization: {
+        id: profile.organization_id,
         name: organization?.name ?? 'Workspace',
         primaryColor: organization?.primary_color ?? '#2FA391',
         logoUrl: organization?.logo_url ?? null,
